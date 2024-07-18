@@ -26,14 +26,14 @@ These template type parameters set the data type used for addresses and data, re
 They must be one of: `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`.
 
 It provides an interface that represents a physical device that has registers that can be read and written:
+
 ```cpp
 virtual void write(AddressType addr, DataType data) = 0;
 [[nodiscard]] virtual DataType read(AddressType addr) = 0;
 ```
 
-It is expected that the user's application will defined subclasses of this interface for each of the kinds of devices the application will communicate with.
+It is expected that the user's application will define subclasses of this interface for each of the kinds of devices the application will communicate with.
 These subclasses must implement these two functions at a minimum.
-
 
 This interface / abstract base class also provides a number of other member functions for other mechanisms for accessing registers.
 These functions are virtual, but not pure.
@@ -111,7 +111,7 @@ Constructors #2, #4, and #6 do not take an Interposer argument and instead get a
 ### Sequencing
 One aspect to the inerposer functionality is delineating groups of operations.
 This is done in two layers: first a "sequence", and then a "step".
-Logically, you can tyink of a sequence being composed of one or more steps, and a step being composed of one or more operations (such as register reads or writes).
+Logically, you can think of a sequence being composed of one or more steps, and a step being composed of one or more operations (such as register reads or writes).
 
 Note, however, that this relationship between sequences, steps, and operations is *not* enforced by the fluent API and is merely a tool that can be used to provide context to the operations.
 
