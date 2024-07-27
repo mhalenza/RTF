@@ -53,7 +53,7 @@ public:
     }
     virtual void seqRead(AddressType start_addr, std::span<DataType> out_data, size_t increment = sizeof(DataType))
     {
-        for (auto i = 0 ; i < out_data.size() ; i++) {
+        for (size_t i = 0 ; i < out_data.size() ; i++) {
             out_data[i] = this->read(start_addr + (increment * i));
         }
     }
@@ -80,7 +80,7 @@ public:
     virtual void compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data)
     {
         assert(addresses.size() == out_data.size());
-        for (auto i = 0 ; i < addresses.size() ; i++) {
+        for (size_t i = 0 ; i < addresses.size() ; i++) {
             out_data[i] = this->read(addresses[i]);
         }
     }
