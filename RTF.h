@@ -219,6 +219,7 @@ private:
         }
     }
     void opExtra(std::span<AddressType const> addresses)
+        requires (!std::is_same_v<AddressType, DataType>)
     {
         if (this->interposer) {
             for (auto const a : addresses) {
