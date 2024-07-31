@@ -248,3 +248,10 @@ bool operator()(CheckFunctorType fn) const
     return false;
 }
 ```
+
+### Default BasicPoller
+The `FluentRegisterTarget::pollRead()` overloads that do not take a `CPoller` use a default BasicPoller.
+To configure the default poller, define these macros project wide:
+- `RTF_DEFAULT_POLLER_INITIAL_DELAY` defaults to 0 seconds
+- `RTF_DEFAULT_POLLER_RECHECK_DELAY` defaults to 500 microseconds
+- `RTF_DEFAULT_POLLER_TIMEOUT` defaults to 3 seconds

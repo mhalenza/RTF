@@ -123,10 +123,19 @@ static_assert(CPoller<BasicPoller>);
 
 extern BasicPoller const default_poller;
 #ifdef RTF_IMPLEMENTATION
+#ifndef RTF_DEFAULT_POLLER_INITIAL_DELAY
+#define RTF_DEFAULT_POLLER_INITIAL_DELAY std::chrono::seconds(0)
+#endif
+#ifndef RTF_DEFAULT_POLLER_RECHECK_DELAY
+#define RTF_DEFAULT_POLLER_RECHECK_DELAY std::chrono::microseconds(500)
+#endif
+#ifndef RTF_DEFAULT_POLLER_TIMEOUT
+#define RTF_DEFAULT_POLLER_TIMEOUT std::chrono::seconds(3)
+#endif
 BasicPoller const default_poller = {
-    std::chrono::seconds(0),
-    std::chrono::microseconds(500),
-    std::chrono::seconds(3)
+    RTF_DEFAULT_POLLER_INITIAL_DELAY,
+    RTF_DEFAULT_POLLER_RECHECK_DELAY,
+    RTF_DEFAULT_POLLER_TIMEOUT
 };
 #endif
 
