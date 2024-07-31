@@ -12,6 +12,9 @@
 #include <vector>
 #include <assert.h>
 #include <stdint.h>
+#ifdef RTF_INTEROP_RMF
+#include <RMF/RMF.h>
+#endif
 
 namespace RTF {
 
@@ -245,7 +248,7 @@ private:
             }
         }
     }
-    void opExtra(std::span<std::pair<AddressType,DataType> const> addr_data)
+    void opExtra(std::span<std::pair<AddressType, DataType> const> addr_data)
     {
         if (this->interposer) {
             for (auto const ad : addr_data) {
@@ -380,6 +383,49 @@ public:
         return *this;
     }
 
+    #ifdef RTF_INTEROP_RMF
+    FluentRegisterTarget& write(::RMF::Register<AddressType, DataType> const& reg, DataType data, std::string_view msg = "")
+    {
+        this->opStart("Write(0x{:0{}x} '{}', 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), data, sizeof(DataType) * 2, msg);
+        try {
+            this->target->write(reg.address(), data);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
+    {
+        this->opStart("Read(0x{:0{}x} '{}'): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), msg);
+        try {
+            out_data = this->target->read(reg.address());
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opExtra(out_data);
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try {
+            this->target->readModifyWrite(reg.address(), new_data, mask);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    #endif
+
     FluentRegisterTarget& seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         this->opStart("SeqWrite(0x{:0{}x}, {}.., {}): {}", start_addr, sizeof(AddressType) * 2, data.size(), increment, msg);
@@ -468,6 +514,37 @@ public:
         return *this;
     }
 
+    #ifdef RTF_INTEROP_RMF
+    FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType const> data, std::string_view msg = "")
+    {
+        this->opStart("FifoWrite(0x{:0{}x} '{}', {}..): {}", fifo_reg.address(), sizeof(AddressType) * 2, fifo_reg.fullName(), data.size(), msg);
+        this->opExtra(data);
+        try {
+            this->target->fifoWrite(fifo_reg.address(), data);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType> out_data, std::string_view msg = "")
+    {
+        this->opStart("FifoRead(0x{:0{}x} '{}', {}): {}", fifo_reg.address(), sizeof(AddressType) * 2, fifo_reg.fullName(), out_data.size(), msg);
+        try {
+            this->target->fifoRead(fifo_reg.address(), out_data);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opExtra(out_data);
+        this->opEnd();
+        return *this;
+    }
+    #endif
+
     FluentRegisterTarget& writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")
     {
         this->opStart("WriteVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, data, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
@@ -503,6 +580,42 @@ public:
         return *this;
     }
 
+    #ifdef RTF_INTEROP_RMF
+    FluentRegisterTarget& writeVerify(::RMF::Register<AddressType, DataType> const& reg, DataType data, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("WriteVerify(0x{:0{}x} '{}, 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), data, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try {
+            this->target->write(reg.address(), data);
+            DataType const reg_val = this->target->read(reg.address());
+            DataType const expected_val = data & mask;
+            if ((reg_val & mask) != expected_val)
+                throw std::runtime_error(std::format("WriteVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& readVerify(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try{
+            DataType const reg_val = this->target->read(reg.address());
+            DataType const expected_val = expected & mask;
+            if ((reg_val & mask) != expected_val)
+                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    #endif
+
     template <CPoller PollerType>
     FluentRegisterTarget& pollRead(PollerType const &poller, AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
@@ -528,6 +641,34 @@ public:
     {
         return this->pollRead(default_poller, addr, expected, mask, msg);
     }
+
+    #ifdef RTF_INTEROP_RMF
+    template <CPoller PollerType>
+    FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("PollRead(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try {
+            DataType const expected_val = expected & mask;
+            DataType reg_val = {};
+            bool const success = poller([&] {
+                reg_val = this->target->read(reg.address()) ;
+                return (reg_val & mask) == expected_val;
+            });
+            if (!success)
+                throw std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Last:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& pollRead(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    {
+        return this->pollRead(default_poller, reg, expected, mask, msg);
+    }
+    #endif
 
     // Overloads that read data and return it instead of using out parameters
     [[nodiscard]] DataType read(AddressType addr, std::string_view msg = "")
@@ -557,6 +698,26 @@ public:
         this->compRead(addresses, rv, msg);
         return rv;
     }
+    #ifdef RTF_INTEROP_RMF
+    [[nodiscard]] DataType read(::RMF::Register<AddressType, DataType> const& reg, std::string_view msg = "")
+    {
+        DataType out_data;
+        this->read(reg, out_data, msg);
+        return out_data;
+    }
+    [[nodiscard]] DataType read(::RMF::Field<AddressType, DataType> const& field, std::string_view msg = "")
+    {
+        assert(field.parent() != nullptr);
+        return field.extract(this->read(*field.parent(), msg));
+    }
+    [[nodiscard]] std::vector<DataType> fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, size_t count, std::string_view msg = "")
+    {
+        std::vector<DataType> rv;
+        rv.resize(count);
+        this->fifoRead(fifo_reg, rv, msg);
+        return rv;
+    }
+    #endif
 
     // Overloads that take a std::initializer_list instead of std::span (see P2447, adopted into C++26, so in a decade these can be removed!)
     FluentRegisterTarget& seqWrite(AddressType start_addr, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
@@ -579,6 +740,12 @@ public:
     {
         return this->compRead(std::span{ addresses.begin(), addresses.end() }, msg);
     }
+    #ifdef RTF_INTEROP_RMF
+    FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::initializer_list<DataType const> data, std::string_view msg = "")
+    {
+        return this->fifoWrite(fifo_reg, std::span{ data.begin(), data.end() }, msg);
+    }
+    #endif
 
 private:
     IFluentRegisterTargetInterposer* interposer;

@@ -164,6 +164,16 @@ Additionally, there are overloads for `seqWrite()`, `fifoWrite()`, `compWrite()`
 This is due to a flaw in the language where a std::span cannot be constructed from an initializer list.
 It was fixed in P2447, adopted into C++26, so once that becomes standard these overloads can be removed.
 
+#### Interopability with Register Map Framework (RMF)
+If a project also uses RMF, defining `RTF_INTEROP_RMF` project-wide will enable a number of `FluentRegisterTarget` member function overloads.
+These overloads correspond to existing functions, however they take a `RMF::Register&` argument instead of a `AddressType` argument.
+
+If the user writes their code like `fluent_register_target.write(some_rmf_register, 0x1234)` instead of `fluent_register_target.write(some_rmf_register.address(), 0x1234)` then the code will compile regardless of whether or not this option is enabled.
+When the option is disabled, the conversion operator overload will be used.
+When the option is enabled, the enabled overloads will instead be used and will provide the same functionality, except with extra information in the interposer messages.
+
+If the user uses the latter form (calling `address()` on the RMF register), then an address will always be passed to the FluentRegisterTarget function and the Interop functionality will never be chosen.
+
 ## IFluentRegisterTargetInterposer
 The interposer is a mechanism that hooks into FluentRegisterTarget to provide logging around the operations.
 
