@@ -13,7 +13,7 @@ RTF is a C++1? framework for working with register spaces, common in embedded an
 ## Getting Started
 RTF is a header-only library, and as such it can simply be copied to your project's source tree.
 
-Exactly one source file must define `RTF_IMPLEMENTATION` before including the header.  
+Exactly one source file must define `RTF_IMPLEMENTATION` before including the header.
 This is to provide storage for a global "interposer" object that will be described later.
 
 Because RTF is a framework, on it's own it doesn't provide much functionality but rather provides useful interface definitions and processes that projects can standardize around.
@@ -127,9 +127,9 @@ All operation functions have `std::string_view msg = ""` as the final parameter.
 This optional "message" provides context for what the operation is doing and is used only by the interposer and not the execution of the operation itself.
 
 #### Utility
-- `null(std::string_view msg = "")`  
+- `null(std::string_view msg = "")`
     Performs no work and can be used to insert some information into the logs produced by the interposer.
-- `delay(std::chrono::microseconds delay, std::string_view msg = "")`  
+- `delay(std::chrono::microseconds delay, std::string_view msg = "")`
     Simply puts the calling thread to sleep for the given amount of time.
 #### IRegisterTarget Operations
 These operations simply call the corresponding function on the contained `IRegisterTarget` (wrapping them with interposer work).
@@ -143,10 +143,10 @@ These operations simply call the corresponding function on the contained `IRegis
 - `compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")`
 - `compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")`
 #### Verifiers
-These functions verify the contents of a register in various ways.  
+These functions verify the contents of a register in various ways.
 If the verification fails, the interposer is informed of the failure and then an exception is thrown.
 - `writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")`
-    Writes the given value to the register and then reads the register back to verify that the write succeeded.  
+    Writes the given value to the register and then reads the register back to verify that the write succeeded.
     Only the bits in `mask` are actually checked for the verification.
     `data` is bitwise-ANDed with `mask` before writing and the rest of the register is set to zero (ie, it is NOT a read-modify-write operation).
 - `readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")`
@@ -181,13 +181,13 @@ All of these callbacks have two initial string_view parameters: `target_domain` 
 These values come from the underlying `IRegisterTarget` by calling it's `getDomain()` and `getName()` member functions.
 This is to facilitiate identifying what target is being accessed (instance) as well as what kind of device it is (domain).
 
-`seq()` is called in response to `FuentRegisterTarget::seq()`.  
+`seq()` is called in response to `FuentRegisterTarget::seq()`.
 `step()` is called in response to `FluentRegisterTarget::step()`.
 
-The other 4 are called in a defined sequence in response to operations.  
+The other 4 are called in a defined sequence in response to operations.
 - `opStart()` is always called at the beginning of the operation execution.
 - `opExtra()` is called zero or more times before and/or after the actual operation (the call to IRegisterTarget).
-    This is used to pass along extra data.  
+    This is used to pass along extra data.
     For some examples (non exhaustive list):
      - `write()` does not use opExtra
      - `read()` calls opExtra once after the read is performed to report the value
@@ -196,13 +196,13 @@ The other 4 are called in a defined sequence in response to operations.
      - `compRead()` calls opExtra once for each address before the reads are performed and once for each data value after.
 - Finally, either `opError()` or `opEnd()` is called at the end of the operation depending on whether there was an error or not.
 
-The final use case for IFluentRegisterTargetInterposer is the ability to hold a "default" interposer that is used by all FluentRegisterTargets that don't explicitly specify one.  
-`IFluentRegisterTargetInterposer::setDefault()` is used to set the default interposer.  
+The final use case for IFluentRegisterTargetInterposer is the ability to hold a "default" interposer that is used by all FluentRegisterTargets that don't explicitly specify one.
+`IFluentRegisterTargetInterposer::setDefault()` is used to set the default interposer.
 `IFluentRegisterTargetInterposer::getDefault()` returns a pointer to this interposer (or nullptr if one hasn't been set yet).
 
 ## CPoller
 `CPoller` is a concept encompassing the algorithm for polling a register, used by `FluentRegisterTarget::pollRead()`.
-Essentially, it's a function object that takes a callback as a parameter and returns a boolean indicating success/timeout.  
+Essentially, it's a function object that takes a callback as a parameter and returns a boolean indicating success/timeout.
 The callback passed into the poller is what acutally performs the register read and comparison:
 ```cpp
 template <CPoller PollerType>
@@ -228,8 +228,8 @@ It's constructor signature is:
 BasicPoller(std::chrono::microseconds initial_delay, std::chrono::microseconds wait_delay, std::chrono::microseconds timeout);
 ```
 
-`initial_delay` is a delay that occurrs before any polling (register reads) occurr.   
-`wait_delay` is a delay that occurrs after register reads if the value does not yet match the expected value.   
+`initial_delay` is a delay that occurrs before any polling (register reads) occurr.
+`wait_delay` is a delay that occurrs after register reads if the value does not yet match the expected value.
 `timeout` is a duration after which the BasicPoller will exit and return false.
 It does *not* include the `initial_delay`.
 
