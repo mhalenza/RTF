@@ -121,6 +121,15 @@ private:
 };
 static_assert(CPoller<BasicPoller>);
 
+extern BasicPoller const default_poller;
+#ifdef RTF_IMPLEMENTATION
+BasicPoller const default_poller = {
+    std::chrono::seconds(0),
+    std::chrono::microseconds(500),
+    std::chrono::seconds(3)
+};
+#endif
+
 struct IFluentRegisterTargetInterposer
 {
 protected:
@@ -508,12 +517,7 @@ public:
     }
     FluentRegisterTarget& pollRead(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
-        static BasicPoller const poller = {
-            std::chrono::seconds(0),
-            std::chrono::microseconds(500),
-            std::chrono::seconds(3)
-        };
-        return this->pollRead(poller, addr, expected, mask, msg);
+        return this->pollRead(default_poller, addr, expected, mask, msg);
     }
 
     // Overloads that read data and return it instead of using out parameters
