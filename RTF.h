@@ -602,23 +602,6 @@ public:
         return *this;
     }
 
-    FluentRegisterTarget& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
-    {
-        this->opStart("ReadVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try{
-            DataType const reg_val = this->target->read(addr);
-            DataType const expected_val = expected & mask;
-            if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
-    }
-
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& writeVerify(::RMF::Register<AddressType, DataType> const& reg, DataType data, DataType mask, std::string_view msg = "")
     {
@@ -637,11 +620,50 @@ public:
         this->opEnd();
         return *this;
     }
+    FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    #endif
+
+    FluentRegisterTarget& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("ReadVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try{
+            DataType const reg_val = this->target->read(addr);
+            DataType const expected_val = expected & mask;
+            if ((reg_val & mask) != expected_val)
+                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+
+    #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& readVerify(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
-        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, msg);
         try{
             DataType const reg_val = this->target->read(reg.address());
+            DataType const expected_val = expected & mask;
+            if ((reg_val & mask) != expected_val)
+                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& readVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    {
+        DataType const expected = field.regVal(field_expected);
+        DataType const mask = field.regMask();
+        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_expected, (field.size() + 3) / 4, msg);
+        try{
+            DataType const reg_val = this->target->read(field.address());
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
                 throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
