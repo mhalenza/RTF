@@ -411,11 +411,40 @@ public:
         this->opEnd();
         return *this;
     }
+    FluentRegisterTarget& read(::RMF::Field<AddressType, DataType> const& field, DataType& out_data, std::string_view msg = "")
+    {
+        this->opStart("Read(0x{:0{}x} '{}'): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), msg);
+        try {
+            out_data = field.extract(this->target->read(field.address()));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opExtra(out_data);
+        this->opEnd();
+        return *this;
+    }
     FluentRegisterTarget& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
     {
         this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
         try {
             this->target->readModifyWrite(reg.address(), new_data, mask);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& readModifyWrite(::RMF::Field<AddressType, DataType> const& field, DataType field_new_data, std::string_view msg = "")
+    {
+        DataType const mask = field.regMask();
+        DataType const new_data = field.regVal(field_new_data);
+        this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_new_data, (field.size() + 3) / 4, msg);
+        try {
+            this->target->readModifyWrite(field.address(), new_data, mask);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
