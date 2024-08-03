@@ -768,8 +768,9 @@ public:
     }
     [[nodiscard]] DataType read(::RMF::Field<AddressType, DataType> const& field, std::string_view msg = "")
     {
-        assert(field.parent() != nullptr);
-        return field.extract(this->read(*field.parent(), msg));
+        DataType out_regval;
+        this->read(field, out_regval, msg);
+        return out_regval;
     }
     [[nodiscard]] std::vector<DataType> fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, size_t count, std::string_view msg = "")
     {
