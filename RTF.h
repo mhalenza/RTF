@@ -14,6 +14,9 @@
 #include <stdint.h>
 #ifdef RTF_INTEROP_RMF
 #include <RMF/RMF.h>
+#ifndef RMF_EXPLICIT_ADDRESSTYPE_CONVERSION_OPERATOR
+#warning "RTF_INTEROP_RMF enabled but RMF_EXPLICIT_ADDRESSTYPE_CONVERSION_OPERATOR is not defined.  Strongly consider defining it for safety!
+#endif
 #endif
 
 namespace RTF {
