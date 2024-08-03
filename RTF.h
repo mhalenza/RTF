@@ -397,6 +397,8 @@ public:
         this->opEnd();
         return *this;
     }
+    FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+
     FluentRegisterTarget& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
     {
         this->opStart("Read(0x{:0{}x} '{}'): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), msg);
