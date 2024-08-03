@@ -523,36 +523,6 @@ public:
         return *this;
     }
 
-    FluentRegisterTarget& compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
-    {
-        this->opStart("CompWrite({}..): {}", addr_data.size(), msg);
-        this->opExtra(addr_data);
-        try {
-            this->target->compWrite(addr_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
-    }
-    FluentRegisterTarget& compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
-    {
-        this->opStart("CompRead({}.., {}..): {}", addresses.size(), out_data.size(), msg);
-        this->opExtra(addresses);
-        try {
-            this->target->compRead(addresses, out_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
-    }
-
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType const> data, std::string_view msg = "")
     {
@@ -583,6 +553,36 @@ public:
         return *this;
     }
     #endif
+
+    FluentRegisterTarget& compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
+    {
+        this->opStart("CompWrite({}..): {}", addr_data.size(), msg);
+        this->opExtra(addr_data);
+        try {
+            this->target->compWrite(addr_data);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
+    {
+        this->opStart("CompRead({}.., {}..): {}", addresses.size(), out_data.size(), msg);
+        this->opExtra(addresses);
+        try {
+            this->target->compRead(addresses, out_data);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opExtra(out_data);
+        this->opEnd();
+        return *this;
+    }
 
     FluentRegisterTarget& writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")
     {
