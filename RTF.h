@@ -729,6 +729,34 @@ public:
     {
         return this->pollRead(default_poller, reg, expected, mask, msg);
     }
+
+    template <CPoller PollerType>
+    FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    {
+        DataType const expected = field.regVal(field_expected);
+        DataType const mask = field.regMask();
+        this->opStart("PollRead(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_expected, (field.size() + 3) / 4, msg);
+        try {
+            DataType const expected_val = expected & mask;
+            DataType reg_val = {};
+            bool const success = poller([&] {
+                reg_val = this->target->read(field.address()) ;
+                return (reg_val & mask) == expected_val;
+            });
+            if (!success)
+                throw std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Last:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    FluentRegisterTarget& pollRead(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    {
+        return this->pollRead(default_poller, field, field_expected, msg);
+    }
     #endif
 
     // Overloads that read data and return it instead of using out parameters
