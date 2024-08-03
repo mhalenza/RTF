@@ -354,35 +354,6 @@ public:
         return *this;
     }
 
-    FluentRegisterTarget& read(AddressType addr, DataType& out_data, std::string_view msg = "")
-    {
-        this->opStart("Read(0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, msg);
-        try {
-            out_data = this->target->read(addr);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
-    }
-
-    FluentRegisterTarget& readModifyWrite(AddressType addr, DataType new_data, DataType mask, std::string_view msg = "")
-    {
-        this->opStart("ReadModifyWrite(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
-            this->target->readModifyWrite(addr, new_data, mask);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
-    }
-
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& write(::RMF::Register<AddressType, DataType> const& reg, DataType data, std::string_view msg = "")
     {
@@ -398,7 +369,24 @@ public:
         return *this;
     }
     FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    #endif
 
+    FluentRegisterTarget& read(AddressType addr, DataType& out_data, std::string_view msg = "")
+    {
+        this->opStart("Read(0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, msg);
+        try {
+            out_data = this->target->read(addr);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opExtra(out_data);
+        this->opEnd();
+        return *this;
+    }
+
+    #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
     {
         this->opStart("Read(0x{:0{}x} '{}'): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), msg);
@@ -427,6 +415,23 @@ public:
         this->opEnd();
         return *this;
     }
+    #endif
+
+    FluentRegisterTarget& readModifyWrite(AddressType addr, DataType new_data, DataType mask, std::string_view msg = "")
+    {
+        this->opStart("ReadModifyWrite(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
+        try {
+            this->target->readModifyWrite(addr, new_data, mask);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+
+    #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
     {
         this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
