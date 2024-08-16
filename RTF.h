@@ -210,6 +210,31 @@ private:
     std::variant<T*, std::unique_ptr<T>, std::shared_ptr<T>> object;
 };
 
+class WriteVerifyFailureException : public std::runtime_error
+{
+public:
+    template <ValidAddressOrDataType DataType>
+    WriteVerifyFailureException(DataType expected, DataType mask, DataType full_actual)
+        : std::runtime_error(std::format("WriteVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected, sizeof(DataType) * 2, full_actual & mask, sizeof(DataType) * 2, full_actual, sizeof(DataType) * 2))
+    {}
+};
+class ReadVerifyFailureException : public std::runtime_error
+{
+public:
+    template <ValidAddressOrDataType DataType>
+    ReadVerifyFailureException(DataType expected, DataType mask, DataType full_actual)
+        : std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected, sizeof(DataType) * 2, full_actual & mask, sizeof(DataType) * 2, full_actual, sizeof(DataType) * 2))
+    {}
+};
+class PollReadTimeoutException : public std::runtime_error
+{
+public:
+    template <ValidAddressOrDataType DataType>
+    PollReadTimeoutException(DataType expected, DataType mask, DataType full_actual)
+        : std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected, sizeof(DataType) * 2, full_actual & mask, sizeof(DataType) * 2, full_actual, sizeof(DataType) * 2))
+    {}
+};
+
 template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
 class FluentRegisterTarget //: public IRegisterTarget<AddressType, DataType> // Can't actually inherit because of covariance requirements on return values.
 {
@@ -232,7 +257,6 @@ private:
         if (this->interposer) {
             this->interposer->opExtra("FluentRegisterTarget", this->target->getName(), std::format("0x{:0{}x}", data, sizeof(DataType) * 2));
         }
-
     }
     void opExtra(std::span<DataType const> data)
     {
@@ -628,7 +652,7 @@ public:
             DataType const reg_val = this->target->read(addr);
             DataType const expected_val = data & mask;
             if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("WriteVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw WriteVerifyFailureException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -647,7 +671,7 @@ public:
             DataType const reg_val = this->target->read(reg.address());
             DataType const expected_val = data & mask;
             if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("WriteVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw WriteVerifyFailureException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -666,7 +690,7 @@ public:
             DataType const reg_val = this->target->read(addr);
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw ReadVerifyFailureException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -684,7 +708,7 @@ public:
             DataType const reg_val = this->target->read(reg.address());
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw ReadVerifyFailureException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -702,7 +726,7 @@ public:
             DataType const reg_val = this->target->read(field.address());
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
-                throw std::runtime_error(std::format("ReadVerify mismatch! Expected:0x{:0{}x} Got:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw ReadVerifyFailureException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -725,7 +749,7 @@ public:
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
-                throw std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Last:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw PollReadTimeoutException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -752,7 +776,7 @@ public:
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
-                throw std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Last:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw PollReadTimeoutException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
@@ -780,7 +804,7 @@ public:
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
-                throw std::runtime_error(std::format("PollRead timeout! Expected:0x{:0{}x} Last:0x{:0{}x} (0x{:0{}x})", expected_val, sizeof(DataType) * 2, reg_val & mask, sizeof(DataType) * 2, reg_val, sizeof(DataType) * 2));
+                throw PollReadTimeoutException(expected_val, mask, reg_val);
         }
         catch (std::exception const& ex) {
             this->opError(ex.what());
