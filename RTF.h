@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include <chrono>
+#include <concepts>
 #include <format>
 #include <memory>
 #include <thread>
@@ -29,12 +30,14 @@ template <typename T>
 concept ValidAddressOrDataType = std::is_same_v<T, T>;
 #endif
 
-template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+template <ValidAddressOrDataType AddressType_, ValidAddressOrDataType DataType_>
 struct IRegisterTarget
 {
 protected:
     IRegisterTarget() = default;
 public:
+    using AddressType = AddressType_;
+    using DataType = DataType_;
     virtual ~IRegisterTarget() = default;
 
     virtual std::string_view getName() const { return "<unknown>"; }
@@ -304,20 +307,24 @@ public:
         : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), target)
     {}
 
-    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::unique_ptr<IRegisterTarget<AddressType, DataType>> target)
+    template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
+    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::unique_ptr<T> target)
         : interposer(interposer)
-        , target(std::move(target))
+        , target(std::unique_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
-    explicit FluentRegisterTarget(std::unique_ptr<IRegisterTarget<AddressType, DataType>> target)
-        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), target)
+    template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
+    explicit FluentRegisterTarget(std::unique_ptr<T> target)
+        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), std::move(target))
     {}
 
-    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::shared_ptr<IRegisterTarget<AddressType, DataType>> target)
+    template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
+    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::shared_ptr<T> target)
         : interposer(interposer)
-        , target(std::move(target))
+        , target(std::shared_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
-    explicit FluentRegisterTarget(std::shared_ptr<IRegisterTarget<AddressType, DataType>> target)
-        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), target)
+    template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
+    explicit FluentRegisterTarget(std::shared_ptr<T> target)
+        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), std::move(target))
     {}
 
     template <typename... Args>
@@ -920,5 +927,14 @@ private:
     IFluentRegisterTargetInterposer* interposer;
     OwnedOrViewedObject<IRegisterTarget<AddressType, DataType>> target;
 };
+
+template <typename T>
+FluentRegisterTarget(std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+template <typename T>
+FluentRegisterTarget(IFluentRegisterTargetInterposer*, std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+template <typename T>
+FluentRegisterTarget(std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+template <typename T>
+FluentRegisterTarget(IFluentRegisterTargetInterposer*, std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 
 }
