@@ -949,4 +949,10 @@ void chunkify(std::span<T> buffer, size_t max_chunk_size, FnType fn)
     }
 }
 
+#ifndef BIT
+#ifndef RTF_NO_BIT
+#define BIT(nr) (1ULL << (nr))
+#endif
+#endif
+
 }
