@@ -102,6 +102,7 @@ void seqWrite(AddressType start_addr, std::span<DataType const> data, size_t inc
 ```
 
 A few tips for subclass implementor, regarding these 6 methods:
+- the IRegisterTarget implementations of these functions will *only* use `read()` and `write()` so it is *always* safe to defer to them
 - seqWrite and seqRead will likely require a check against `increment` as shown above
 - seqWrite and seqRead will likely need to multiply `chunk_offset` by `increment` for each lower level call
 - seqWrite, fifoWrite, and compWrite will likely chunkify over the input span
