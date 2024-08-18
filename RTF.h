@@ -34,13 +34,13 @@ template <ValidAddressOrDataType AddressType_, ValidAddressOrDataType DataType_>
 struct IRegisterTarget
 {
 protected:
-    IRegisterTarget() = default;
+    IRegisterTarget(std::string_view name) : name(name) {}
 public:
     using AddressType = AddressType_;
     using DataType = DataType_;
     virtual ~IRegisterTarget() = default;
 
-    virtual std::string_view getName() const { return "<unknown>"; }
+    virtual std::string_view getName() const { return this->name; }
     virtual std::string_view getDomain() const { return "IRegisterTarget"; }
 
     virtual void write(AddressType addr, DataType data) = 0;
@@ -93,6 +93,8 @@ public:
             out_data[i] = this->read(addresses[i]);
         }
     }
+private:
+    std::string name;
 };
 
 template <typename PollerType>

@@ -8,14 +8,12 @@
 namespace RTF {
 
 template <typename AddressType, typename DataType>
-class SimpleDummyRegisterTarget : public virtual RTF::IRegisterTarget<AddressType, DataType>
+class SimpleDummyRegisterTarget : public RTF::IRegisterTarget<AddressType, DataType>
 {
 public:
     SimpleDummyRegisterTarget(std::string_view name)
-        : name(name)
+        : RTF::IRegisterTarget<AddressType, DataType>(name)
     {}
-
-    virtual std::string_view getName() const override { return this->name; }
     static std::string_view getDomain() { return "SimpleDummyRegisterTarget"; }
 
     virtual void write(AddressType addr, DataType data) override
@@ -30,7 +28,6 @@ public:
         return rv;
     }
 protected:
-    std::string name;
     std::unordered_map<AddressType, DataType> regs;
 };
 
