@@ -79,6 +79,49 @@ For reads, the addresses are provided in `addresses` and the data read from thos
 Subclasses may have restrictions on access, such as only being able to pack a limited number of writes/reads into a lower-level access.
 Subclasses *must* check for these unsupported cases and either break them up into supported accesses OR simply defer to the base class implementation (which are always single-accesses in for-loops).
 
+### Typical Seq/Fifo/Compressed Implementation
+Most implementations will not be able to implement these reads/writes as single calls and have restrictions:
+- Sequential operations may only support certain `increment` values
+- All 6 operatons may only support a limited number of writes/reads in a single lower-level call.
+
+For example, presume a subclass can only support 10 writes at a time for Sequential Writes and the increment can only ever be 4.
+This would be a common way to implement it:
+```c++
+void seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment)
+{
+    // Defer to base IRegisterTarget implementation if increment is not 4
+    if (increment != 4)
+        return this->IRegisterTarget::seqWrite(start_addr, data, increment);
+
+    // Chunkify the input span to 10 items or less
+    RTF::chunkify(data, 10, [&](std::span<DataType const> chunk, size_t chunk_offset){
+        AddressType chunk_start_addr = start_addr + (increment * chunk_offset);
+        // Perform the write with `chunk`, `chunk_start_addr`, and `increment`
+    });
+}
+```
+
+A few tips for subclass implementor, regarding these 6 methods:
+- seqWrite and seqRead will likely require a check against `increment` as shown above
+- seqWrite and seqRead will likely need to multiply `chunk_offset` by `increment` for each lower level call
+- seqWrite, fifoWrite, and compWrite will likely chunkify over the input span
+- seqRead and fifoRead will likely chunkify over the output span
+- compRead is the tricky one as it utilizes both an input span and an output span
+    The recommended approach is to chunkify the input span, and assign to the output span, indexing with `chunk_offset + i` where `i` is an interation variable for each element in the chunk.
+    However, doing the opposite (chunkifying the output span and indexing the input span with `chunk_offset + i`) instead is equally valid.
+    An example is provided:
+
+```c++
+void compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data)
+{
+    assert(addresses.size() == out_data.size());
+    RTF::chunkify(addresses, MAX_CHUNK_SIZE, [&](std::span<AddressType const> address_chunk, size_t chunk_offset){
+        std::span<DataType> out_data_chunk = out_data.subspan(chunk_offset, address_chunk.size());
+        // Perform read of addresses in `address_chunk` and store their respective data values into `out_data_chunk`
+    });
+}
+```
+
 ## FluentRegisterTarget
 `FluentRegisterTarget` provides an API that is modeled after `IRegisterTarget` but is a fluent API and includes even more functionality.
 However, it does *not* subclass `IRegisterTarget` due to return value covariance requirements in the C++ language.

@@ -937,4 +937,16 @@ FluentRegisterTarget(std::unique_ptr<T>) -> FluentRegisterTarget<typename T::Add
 template <typename T>
 FluentRegisterTarget(IFluentRegisterTargetInterposer*, std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 
+template <typename T, typename FnType>
+inline
+void chunkify(std::span<T> buffer, size_t max_chunk_size, FnType fn)
+{
+    for (size_t pos = 0 ; pos < buffer.size() ; ){
+        auto const chunk_size = std::min(max_chunk_size, buffer.size() - pos);
+        auto const chunk = buffer.subspan(pos, chunk_size);
+        fn(chunk, pos);
+        pos += chunk_size;
+    }
+}
+
 }
