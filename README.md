@@ -27,7 +27,6 @@ The field-based functions are also slightly modified (such as `readModifyWrite()
 
 #### RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
 Enabled `FluentRegisterTarget` member functions that may potentially be misused, and as such aren't available by default.
-These functions are `seqWrite()` and `seqRead()` overloads that take an `RMF::Register` instead of Address.
 
 #### RTF_UNRESTRICTED_ADDRESS_AND_DATA_TYPES
 Normally, `AddressType` and `DataType` are restricted to `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`.

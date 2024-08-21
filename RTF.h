@@ -528,7 +528,6 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
     FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         this->opStart("SeqWrite(0x{:0{}x} '{}', {}.., {}): {}", start_reg.address(), sizeof(AddressType) * 2, start_reg.fullName(), data.size(), increment, msg);
@@ -557,10 +556,6 @@ public:
         this->opEnd();
         return *this;
     }
-    #else
-    FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "") = delete;
-    FluentRegisterTarget& seqRead(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "") = delete;
-    #endif
     #endif
 
     FluentRegisterTarget& fifoWrite(AddressType fifo_addr, std::span<DataType const> data, std::string_view msg = "")
@@ -869,7 +864,6 @@ public:
         this->read(field, out_regval, msg);
         return out_regval;
     }
-    #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
     [[nodiscard]] std::vector<DataType> seqRead(::RMF::Register<AddressType, DataType> const& start_reg, size_t count, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         std::vector<DataType> rv;
@@ -877,9 +871,6 @@ public:
         this->seqRead(start_reg, rv, increment, msg);
         return rv;
     }
-    #else
-    [[nodiscard]] std::vector<DataType> seqRead(::RMF::Register<AddressType, DataType> const& start_reg, size_t count, size_t increment = sizeof(DataType), std::string_view msg = "") = delete;
-    #endif
     [[nodiscard]] std::vector<DataType> fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, size_t count, std::string_view msg = "")
     {
         std::vector<DataType> rv;
@@ -911,14 +902,10 @@ public:
         return this->compRead(std::span{ addresses.begin(), addresses.end() }, msg);
     }
     #ifdef RTF_INTEROP_RMF
-    #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
     FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         return this->seqWrite(start_reg, std::span{ data.begin(), data.end() }, increment, msg);
     }
-    #else
-    FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "") = delete;
-    #endif
     FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::initializer_list<DataType const> data, std::string_view msg = "")
     {
         return this->fifoWrite(fifo_reg, std::span{ data.begin(), data.end() }, msg);
