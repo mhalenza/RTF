@@ -247,27 +247,27 @@ private:
     void opStart(std::string_view msg)
     {
         if (this->interposer) {
-            this->interposer->opStart("FluentRegisterTarget", this->target->getName(), msg);
+            this->interposer->opStart(this->target->getDomain(), this->target->getName(), msg);
         }
     }
     template <typename... Args>
     void opStart(std::format_string<Args...> fmt, Args... args)
     {
         if (this->interposer) {
-            this->interposer->opStart("FluentRegisterTarget", this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
+            this->interposer->opStart(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
         }
     }
     void opExtra(DataType data)
     {
         if (this->interposer) {
-            this->interposer->opExtra("FluentRegisterTarget", this->target->getName(), std::format("0x{:0{}x}", data, sizeof(DataType) * 2));
+            this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", data, sizeof(DataType) * 2));
         }
     }
     void opExtra(std::span<DataType const> data)
     {
         if (this->interposer) {
             for (auto const d : data) {
-                this->interposer->opExtra("FluentRegisterTarget", this->target->getName(), std::format("0x{:0{}x}", d, sizeof(DataType) * 2));
+                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", d, sizeof(DataType) * 2));
             }
         }
     }
@@ -276,7 +276,7 @@ private:
     {
         if (this->interposer) {
             for (auto const a : addresses) {
-                this->interposer->opExtra("FluentRegisterTarget", this->target->getName(), std::format("0x{:0{}x}", a, sizeof(AddressType) * 2));
+                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", a, sizeof(AddressType) * 2));
             }
         }
     }
@@ -284,20 +284,20 @@ private:
     {
         if (this->interposer) {
             for (auto const ad : addr_data) {
-                this->interposer->opExtra("FluentRegisterTarget", this->target->getName(), std::format("0x{:0{}x} 0x{:0{}x}", ad.first, sizeof(AddressType) * 2, ad.second, sizeof(DataType) * 2));
+                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x} 0x{:0{}x}", ad.first, sizeof(AddressType) * 2, ad.second, sizeof(DataType) * 2));
             }
         }
     }
     void opEnd()
     {
         if (this->interposer) {
-            this->interposer->opEnd("FluentRegisterTarget", this->target->getName());
+            this->interposer->opEnd(this->target->getDomain(), this->target->getName());
         }
     }
     void opError(std::string_view msg)
     {
         if (this->interposer) {
-            this->interposer->opError("FluentRegisterTarget", this->target->getName(), msg);
+            this->interposer->opError(this->target->getDomain(), this->target->getName(), msg);
         }
     }
 public:
@@ -333,14 +333,14 @@ public:
     FluentRegisterTarget& seq(std::format_string<Args...> fmt, Args... args)
     {
         if (this->interposer) {
-            this->interposer->seq("FluentRegisterTarget", this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
+            this->interposer->seq(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
         }
         return *this;
     }
     FluentRegisterTarget& seq(std::string_view msg)
     {
         if (this->interposer) {
-            this->interposer->seq("FluentRegisterTarget", this->target->getName(), msg);
+            this->interposer->seq(this->target->getDomain(), this->target->getName(), msg);
         }
         return *this;
     }
@@ -349,14 +349,14 @@ public:
     FluentRegisterTarget& step(std::format_string<Args...> fmt, Args... args)
     {
         if (this->interposer) {
-            this->interposer->step("FluentRegisterTarget", this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
+            this->interposer->step(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
         }
         return *this;
     }
     FluentRegisterTarget& step(std::string_view msg)
     {
         if (this->interposer) {
-            this->interposer->step("FluentRegisterTarget", this->target->getName(), msg);
+            this->interposer->step(this->target->getDomain(), this->target->getName(), msg);
         }
         return *this;
     }
