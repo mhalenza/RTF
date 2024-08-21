@@ -18,6 +18,31 @@ This is to provide storage for a global "interposer" object that will be describ
 
 Because RTF is a framework, on it's own it doesn't provide much functionality but rather provides useful interface definitions and processes that projects can standardize around.
 
+### Compile Time Configuration Reference
+Configuration is accomplished with `#define`s defined before the header is included.
+
+#### RTF_INTEROP_RMF
+Enables `FluentRegisterTarget` member functions that take an `RMF::Register` or `RMF::Field` instead of an `AddressType`.
+The field-based functions are also slightly modified (such as `readModifyWrite()` not having to take a mask parameter, as it is defined by the Field).
+
+#### RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
+Enabled `FluentRegisterTarget` member functions that may potentially be misused, and as such aren't available by default.
+These functions are `seqWrite()` and `seqRead()` overloads that take an `RMF::Register` instead of Address.
+
+#### RTF_UNRESTRICTED_ADDRESS_AND_DATA_TYPES
+Normally, `AddressType` and `DataType` are restricted to `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`.
+When this is defined, the check is completely removed and any type can be used.
+
+#### RTF_DEFAULT_POLLER_INITIAL_DELAY, RTF_DEFAULT_POLLER_RECHECK_DELAY, RTF_DEFAULT_POLLER_TIMEOUT
+Sets the parameters for a `BasicPoller` that is used by `pollRead` when a `CPoller` is not supplied.
+See [Default BasicPoller](#default-basicpoller) for more.
+
+#### RTF_NO_BIT
+Normally, `RTF.h` will supply a definition of `BIT(nr)` unless one already exists OR this define is turned on.
+
+#### RMF_EXPLICIT_ADDRESSTYPE_CONVERSION_OPERATOR
+While not an RTF configuration option, if `RTF_INTEROP_RMF` is defined but this one is not, a compiler warning will be issued.
+
 ## IRegisterTarget
 `IRegisterTarget` is the main focal point of the library.
 
