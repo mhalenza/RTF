@@ -27,6 +27,9 @@ The field-based functions are also slightly modified (such as `readModifyWrite()
 
 #### RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
 Enabled `FluentRegisterTarget` member functions that may potentially be misused, and as such aren't available by default.
+Currently the two functions enabled by this are `write()` and `writeVerify()` that take an `RMF::Field`.
+These are considered dangerous because they overwrite the whole register, but the call signature may lead the reader to believe they're merely writing the field (essentially requiring a read-modify-write of the whole register).
+These *can* be used safely if the register uses "write enables" but at this time RTF & RMF don't really allow this to work in a clean way.
 
 #### RTF_UNRESTRICTED_ADDRESS_AND_DATA_TYPES
 Normally, `AddressType` and `DataType` are restricted to `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`.

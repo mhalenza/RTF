@@ -404,7 +404,23 @@ public:
         this->opEnd();
         return *this;
     }
+    #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
+    FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
+    {
+        this->opStart("Write(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_data, (field.size() + 3) / 4, msg);
+        try {
+            this->target->write(field.address(), field.regVal(field_data));
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    #else
     FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    #endif
     #endif
 
     FluentRegisterTarget& read(AddressType addr, DataType& out_data, std::string_view msg = "")
@@ -684,7 +700,29 @@ public:
         this->opEnd();
         return *this;
     }
+    #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
+    FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
+    {
+        this->opStart("WriteVerify(0x{:0{}x} '{}, 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_data, (field.size() + 3) / 4, msg);
+        try {
+            DataType const data = field.regVal(field_data);
+            this->target->write(field.address(), data);
+            DataType const reg_val = this->target->read(field.address());
+            DataType const mask = field.regMask();
+            DataType const expected_val = data & mask;
+            if ((reg_val & mask) != expected_val)
+                throw WriteVerifyFailureException(expected_val, mask, reg_val);
+        }
+        catch (std::exception const& ex) {
+            this->opError(ex.what());
+            throw;
+        }
+        this->opEnd();
+        return *this;
+    }
+    #else
     FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    #endif
     #endif
 
     FluentRegisterTarget& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
