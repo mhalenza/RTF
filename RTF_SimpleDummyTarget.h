@@ -14,7 +14,7 @@ public:
     SimpleDummyRegisterTarget(std::string_view name)
         : RTF::IRegisterTarget<AddressType, DataType>(name)
     {}
-    static std::string_view getDomain() { return "SimpleDummyRegisterTarget"; }
+    virtual std::string_view getDomain() const override { return "SimpleDummyRegisterTarget"; }
 
     virtual void write(AddressType addr, DataType data) override
     {
