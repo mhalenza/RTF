@@ -352,6 +352,574 @@ std::unique_ptr<IFluentInterposer<uint64_t, uint32_t>> IFluentInterposer<uint64_
 std::unique_ptr<IFluentInterposer<uint64_t, uint64_t>> IFluentInterposer<uint64_t, uint64_t>::default_interposer = nullptr;
 #endif
 
+class IConsolidatedFluentInterposer
+{
+public:
+    virtual ~IConsolidatedFluentInterposer() = default;
+    virtual void seq(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void step(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void extra(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance) = 0;
+    virtual void error(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+
+    static void setDefault(std::unique_ptr<IConsolidatedFluentInterposer> new_default_interposer)
+    {
+        default_interposer = std::move(new_default_interposer);
+    }
+    static IConsolidatedFluentInterposer* getDefault()
+    {
+        return default_interposer.get();
+    }
+
+private:
+    static std::unique_ptr<IConsolidatedFluentInterposer> default_interposer;
+};
+#ifdef RTF_IMPLEMENTATION
+std::unique_ptr<IConsolidatedFluentInterposer> IConsolidatedFluentInterposer::default_interposer = nullptr;
+#endif
+
+enum class OperationFormattingVerbosity
+{
+    eMinimal,
+    eCompact,
+    eFull,
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+class BasicFluentInterposerAdapter : public IFluentInterposer<AddressType, DataType>
+{
+private:
+    template <typename... Args>
+    void op(std::string_view target_domain, std::string_view target_instance, std::format_string<Args...> fmt, Args... args)
+    {
+        if (this->consolidated) {
+            this->consolidated->op(target_domain, target_instance, std::vformat(fmt.get(), std::make_format_args(args...)));
+        }
+    }
+    template <typename... Args>
+    void end(std::string_view target_domain, std::string_view target_instance, std::format_string<Args...> fmt, Args... args)
+    {
+        if (this->consolidated) {
+            this->consolidated->end(target_domain, target_instance, std::vformat(fmt.get(), std::make_format_args(args...)));
+        }
+    }
+    void end(std::string_view target_domain, std::string_view target_instance)
+    {
+        if (this->consolidated) {
+            this->consolidated->end(target_domain, target_instance);
+        }
+    }
+    void extra(std::string_view target_domain, std::string_view target_instance, std::span<DataType const> data)
+    {
+        if (this->consolidated) {
+            if (data.size() <= this->array_size_limit) {
+                if (this->verbosity == OperationFormattingVerbosity::eCompact) {
+                    std::string msg;
+                    for (auto d : data) {
+                        msg += std::format("0x{:0{}x}, ", d, sizeof(DataType) * 2);
+                    }
+                    this->consolidated->extra(target_domain, target_instance, msg);
+                }
+                else if (this->verbosity == OperationFormattingVerbosity::eFull) {
+                    for (auto d : data) {
+                        this->consolidated->extra(target_domain, target_instance, std::format("0x{:0{}x}", d, sizeof(DataType) * 2));
+                    }
+                }
+            }
+        }
+    }
+    void extra(std::string_view target_domain, std::string_view target_instance, std::span<AddressType const> addresses)
+        requires (!std::is_same_v<AddressType, DataType>)
+    {
+        if (this->consolidated) {
+            if (addresses.size() <= this->array_size_limit) {
+                if (this->verbosity == OperationFormattingVerbosity::eCompact) {
+                    std::string msg;
+                    for (auto a : addresses) {
+                        msg += std::format("0x{:0{}x}, ", a, sizeof(AddressType) * 2);
+                    }
+                    this->consolidated->extra(target_domain, target_instance, msg);
+                }
+                else if (this->verbosity == OperationFormattingVerbosity::eFull) {
+                    for (auto a : addresses) {
+                        this->consolidated->extra(target_domain, target_instance, std::format("0x{:0{}x}", a, sizeof(AddressType) * 2));
+                    }
+                }
+            }
+        }
+    }
+    void extra(std::string_view target_domain, std::string_view target_instance, std::span<std::pair<AddressType, DataType> const> addr_data)
+    {
+        if (this->consolidated) {
+            if (addr_data.size() <= this->array_size_limit) {
+                if (this->verbosity == OperationFormattingVerbosity::eCompact) {
+                    std::string msg;
+                    for (auto ad : addr_data) {
+                        msg += std::format("0x{:0{}x}=0x{:0{}x}, ", ad.first, sizeof(AddressType) * 2, ad.second, sizeof(DataType) * 2);
+                    }
+                    this->consolidated->extra(target_domain, target_instance, msg);
+                }
+                else if (this->verbosity == OperationFormattingVerbosity::eFull) {
+                    for (auto ad : addr_data) {
+                        this->consolidated->extra(target_domain, target_instance, std::format("0x{:0{}x}=0x{:0{}x}, ", ad.first, sizeof(AddressType) * 2, ad.second, sizeof(DataType) * 2));
+                    }
+                }
+            }
+        }
+    }
+public:
+    BasicFluentInterposerAdapter(IConsolidatedFluentInterposer* consolidated, OperationFormattingVerbosity verb = OperationFormattingVerbosity::eFull, size_t array_size_limit = 4096)
+        : consolidated(consolidated)
+        , verbosity(verb)
+        , array_size_limit(array_size_limit)
+    {}
+    explicit BasicFluentInterposerAdapter(OperationFormattingVerbosity verb = OperationFormattingVerbosity::eFull, size_t array_size_limit = 4096)
+        : consolidated(IConsolidatedFluentInterposer::getDefault())
+        , verbosity(verb)
+        , array_size_limit(array_size_limit)
+    {}
+
+    virtual void seq(std::string_view td, std::string_view ti, Operations::Seq const& seq) override
+    {
+        if (this->consolidated)
+            this->consolidated->seq(td, ti, seq.msg);
+    }
+    virtual void step(std::string_view td, std::string_view ti, Operations::Step const& step) override
+    {
+        if (this->consolidated)
+            this->consolidated->step(td, ti, step.msg);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::Null const& op) override
+    {
+        this->op(td, ti, "Null(): {}",
+                 op.msg);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::Null const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::Delay const& op) override
+    {
+        this->op(td, ti, "Delay({}): {}",
+                 op.delay,
+                 op.msg);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::Delay const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::Write<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "Write(0x{:0{}x}, 0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.data, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "Write(0x{:0{}x} '{}', 0x{:0{}x}): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.data, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "Write(0x{:0{}x} '{}', 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x}): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         field.extract(op.data), (field.size() + 3) / 4,
+                         op.data, sizeof(DataType) * 2,
+                         field.regMask(), sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::Write<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::Read<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "Read(0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "Read(0x{:0{}x} '{}'): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "Read(0x{:0{}x} '{}'): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::Read<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->end(td, ti, "ReadResp: 0x{:0{}x}",
+                          op.out_data, sizeof(DataType) * 2);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->end(td, ti, "ReadResp: 0x{:0{}x}",
+                          op.out_data, sizeof(DataType) * 2);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->end(td, ti, "ReadResp: 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x})",
+                          field.extract(op.out_data), (field.size() + 3) / 4,
+                          op.out_data, sizeof(DataType) * 2,
+                          field.regMask(), sizeof(DataType) * 2);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::ReadModifyWrite<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "ReadModifyWrite(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.new_data & op.mask, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.new_data & op.mask, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x})): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         field.extract(op.new_data), (field.size() + 3) / 4,
+                         op.new_data, sizeof(DataType) * 2,
+                         field.regMask(), sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::ReadModifyWrite<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::SeqWrite<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& start_addr) {
+            using T = std::decay_t<decltype(start_addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "SeqWrite(0x{:0{}x}, {}.., {}): {}",
+                         start_addr, sizeof(AddressType) * 2,
+                         op.data.size(),
+                         op.increment,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& start_reg = start_addr.get();
+                this->op(td, ti, "SeqWrite(0x{:0{}x} '{}', {}.., {}): {}",
+                         start_reg.address(), sizeof(AddressType) * 2,
+                         start_reg.fullName(),
+                         op.data.size(),
+                         op.increment,
+                         op.msg);
+            }
+            #endif
+        }, op.start_address);
+        this->extra(td, ti, op.data);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::SeqWrite<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::SeqRead<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& start_addr) {
+            using T = std::decay_t<decltype(start_addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "SeqRead(0x{:0{}x}, {}.., {}): {}",
+                         start_addr, sizeof(AddressType) * 2,
+                         op.out_data.size(),
+                         op.increment,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& start_reg = start_addr.get();
+                this->op(td, ti, "SeqRead(0x{:0{}x} '{}', {}.., {}): {}",
+                         start_reg.address(), sizeof(AddressType) * 2,
+                         start_reg.fullName(),
+                         op.out_data.size(),
+                         op.increment,
+                         op.msg);
+            }
+            #endif
+        }, op.start_address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::SeqRead<AddressType, DataType> const& op) override
+    {
+        this->extra(td, ti, op.out_data);
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::FifoWrite<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& fifo_addr) {
+            using T = std::decay_t<decltype(fifo_addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "FifoWrite(0x{:0{}x}, {}..): {}",
+                         fifo_addr, sizeof(AddressType) * 2,
+                         op.data.size(),
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& fifo_reg = fifo_addr.get();
+                this->op(td, ti, "FifoWrite(0x{:0{}x} '{}', {}..): {}",
+                         fifo_reg.address(), sizeof(AddressType) * 2,
+                         fifo_reg.fullName(),
+                         op.data.size(),
+                         op.msg);
+            }
+            #endif
+        }, op.fifo_address);
+        this->extra(td, ti, op.data);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::FifoWrite<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::FifoRead<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& fifo_addr) {
+            using T = std::decay_t<decltype(fifo_addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "FifoRead(0x{:0{}x}, {}): {}",
+                         fifo_addr, sizeof(AddressType) * 2,
+                         op.out_data.size(),
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& fifo_reg = fifo_addr.get();
+                this->op(td, ti, "FifoRead(0x{:0{}x} '{}', {}): {}",
+                         fifo_reg.address(), sizeof(AddressType) * 2,
+                         fifo_reg.fullName(),
+                         op.out_data.size(),
+                         op.msg);
+            }
+            #endif
+        }, op.fifo_address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::FifoRead<AddressType, DataType> const& op) override
+    {
+        this->extra(td, ti, op.out_data);
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::CompWrite<AddressType, DataType> const& op) override
+    {
+        this->op(td, ti, "CompWrite({}..): {}",
+                 op.address_data.size(),
+                 op.msg);
+        this->extra(td, ti, op.address_data);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::CompWrite<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::CompRead<AddressType, DataType> const& op) override
+    {
+        this->op(td, ti, "CompRead({}.., {}..): {}",
+                 op.addresses.size(),
+                 op.out_data.size(),
+                 op.msg);
+        this->extra(td, ti, op.addresses);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::CompRead<AddressType, DataType> const& op) override
+    {
+        this->extra(td, ti, op.out_data);
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::WriteVerify<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "WriteVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.data, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "WriteVerify(0x{:0{}x} '{}, 0x{:0{}x}, 0x{:0{}x}): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.data, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "WriteVerify(0x{:0{}x} '{}, 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x})): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         field.extract(op.data), (field.size() + 3) / 4,
+                         op.data, sizeof(DataType) * 2,
+                         field.regMask(), sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::WriteVerify<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::ReadVerify<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "ReadVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.expected, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.expected, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "ReadVerify(0x{:0{}x} '{}, 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x})): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         field.extract(op.expected), (field.size() + 3) / 4,
+                         op.expected, sizeof(DataType) * 2,
+                         field.regMask(), sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::ReadVerify<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void op(std::string_view td, std::string_view ti, Operations::PollRead<AddressType, DataType> const& op) override
+    {
+        std::visit([&](auto&& addr) {
+            using T = std::decay_t<decltype(addr)>;
+            if constexpr (std::is_same_v<T, AddressType>) {
+                this->op(td, ti, "PollRead(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}",
+                         addr, sizeof(AddressType) * 2,
+                         op.expected, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #ifdef RTF_INTEROP_RMF
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Register<AddressType, DataType> const>>) {
+                auto const& reg = addr.get();
+                this->op(td, ti, "PollRead(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}",
+                         reg.address(), sizeof(AddressType) * 2,
+                         reg.fullName(),
+                         op.expected, sizeof(DataType) * 2,
+                         op.mask, sizeof(DataType) * 2,
+                         op.msg);
+            }
+            else if constexpr (std::is_same_v<T, std::reference_wrapper<::RMF::Field<AddressType, DataType> const>>) {
+                auto const& field = addr.get();
+                this->op(td, ti, "PollRead(0x{:0{}x} '{}', 0x{:0{}x} (0x{:0{}x} & 0x{:0{}x})): {}",
+                         field.address(), sizeof(AddressType) * 2,
+                         field.fullName(),
+                         field.extract(op.expected), (field.size() + 3) / 4,
+                         op.expected, sizeof(DataType) * 2,
+                         field.regMask(), sizeof(DataType) * 2,
+                         op.msg);
+            }
+            #endif
+        }, op.address);
+    }
+    virtual void end(std::string_view td, std::string_view ti, Operations::PollRead<AddressType, DataType> const& op) override
+    {
+        this->end(td, ti);
+    }
+    virtual void error(std::string_view td, std::string_view ti, std::exception const& ex) override
+    {
+        if (this->consolidated)
+            this->consolidated->error(td, ti, ex.what());
+    }
+
+private:
+    IConsolidatedFluentInterposer* consolidated;
+    OperationFormattingVerbosity verbosity;
+    size_t array_size_limit;
+};
+
+template <template<typename, typename> typename BaseInterposerType = BasicFluentInterposerAdapter, typename... Args>
+inline
+void createDefaultInterposerAdapters(Args... args)
+{
+    RTF::IFluentInterposer<uint8_t, uint8_t>::setDefault(std::make_unique<BaseInterposerType<uint8_t, uint8_t>>(args...));
+    RTF::IFluentInterposer<uint8_t, uint16_t>::setDefault(std::make_unique<BaseInterposerType<uint8_t, uint16_t>>(args...));
+    RTF::IFluentInterposer<uint8_t, uint32_t>::setDefault(std::make_unique<BaseInterposerType<uint8_t, uint32_t>>(args...));
+    RTF::IFluentInterposer<uint8_t, uint64_t>::setDefault(std::make_unique<BaseInterposerType<uint8_t, uint64_t>>(args...));
+    RTF::IFluentInterposer<uint16_t, uint8_t>::setDefault(std::make_unique<BaseInterposerType<uint16_t, uint8_t>>(args...));
+    RTF::IFluentInterposer<uint16_t, uint16_t>::setDefault(std::make_unique<BaseInterposerType<uint16_t, uint16_t>>(args...));
+    RTF::IFluentInterposer<uint16_t, uint32_t>::setDefault(std::make_unique<BaseInterposerType<uint16_t, uint32_t>>(args...));
+    RTF::IFluentInterposer<uint16_t, uint64_t>::setDefault(std::make_unique<BaseInterposerType<uint16_t, uint64_t>>(args...));
+    RTF::IFluentInterposer<uint32_t, uint8_t>::setDefault(std::make_unique<BaseInterposerType<uint32_t, uint8_t>>(args...));
+    RTF::IFluentInterposer<uint32_t, uint16_t>::setDefault(std::make_unique<BaseInterposerType<uint32_t, uint16_t>>(args...));
+    RTF::IFluentInterposer<uint32_t, uint32_t>::setDefault(std::make_unique<BaseInterposerType<uint32_t, uint32_t>>(args...));
+    RTF::IFluentInterposer<uint32_t, uint64_t>::setDefault(std::make_unique<BaseInterposerType<uint32_t, uint64_t>>(args...));
+    RTF::IFluentInterposer<uint64_t, uint8_t>::setDefault(std::make_unique<BaseInterposerType<uint64_t, uint8_t>>(args...));
+    RTF::IFluentInterposer<uint64_t, uint16_t>::setDefault(std::make_unique<BaseInterposerType<uint64_t, uint16_t>>(args...));
+    RTF::IFluentInterposer<uint64_t, uint32_t>::setDefault(std::make_unique<BaseInterposerType<uint64_t, uint32_t>>(args...));
+    RTF::IFluentInterposer<uint64_t, uint64_t>::setDefault(std::make_unique<BaseInterposerType<uint64_t, uint64_t>>(args...));
+}
+
 template <typename T>
 class OwnedOrViewedObject final
 {
