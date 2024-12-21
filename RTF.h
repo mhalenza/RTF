@@ -145,34 +145,211 @@ BasicPoller const default_poller = {
 };
 #endif
 
-struct IFluentRegisterTargetInterposer
+namespace Operations {
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+using AddressRegType = std::variant<
+    AddressType
+    #ifdef RTF_INTEROP_RMF
+    , std::reference_wrapper<::RMF::Register<AddressType, DataType> const>
+    #endif
+>;
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+using AddressRegFieldType = std::variant<
+    AddressType
+    #ifdef RTF_INTEROP_RMF
+    , std::reference_wrapper<::RMF::Register<AddressType, DataType> const>
+    , std::reference_wrapper<::RMF::Field<AddressType, DataType> const>
+    #endif
+>;
+
+/* Note for the Operations structs while RTF_INTEROP_RMF:
+*   When the struct contains a `AddressRegFieldType<AddressType, DataType> address` field,
+*   A corresponding `data` field always represents the full register value.
+*   This is obviously correct for when the variant holds an AddressType or an RMF::Register<AT,DT>.
+*   But it's not intuitive for the case when it holds an RMF::Field<AD,DT>.
+*   It would have made sense for the `data` field to hold just the field data,
+*   but the interposer almost certainly wants to log the whole register value in addition to the specific field value.
+*   I didn't want to *also* make the `data` field a variant because that would have been hell.
+*   Instead, `data` always holds the full register value and the interposer can easily use
+*   the RMF::Field<AT,DR> to extract the field value for logging.
+*/
+
+struct Seq {
+    std::string_view msg;
+};
+struct Step {
+    std::string_view msg;
+};
+
+struct Null {
+    std::string_view msg;
+};
+struct Delay {
+    std::chrono::microseconds delay;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct Write {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType data;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct Read {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType const& out_data;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct ReadModifyWrite {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType new_data;
+    DataType mask;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct SeqWrite {
+    AddressRegType<AddressType, DataType> start_address;
+    std::span<DataType const> data;
+    size_t increment;
+    std::string_view msg;
+};
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct SeqRead {
+    AddressRegType<AddressType, DataType> start_address;
+    std::span<DataType const> out_data;
+    size_t increment;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct FifoWrite {
+    AddressRegType<AddressType, DataType> fifo_address;
+    std::span<DataType const> data;
+    std::string_view msg;
+};
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct FifoRead {
+    AddressRegType<AddressType, DataType> fifo_address;
+    std::span<DataType const> out_data;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct CompWrite {
+    //TODO: AddressRegType<AddressType, DataType> in here somehow
+    std::span<std::pair<AddressType, DataType> const> address_data;
+    std::string_view msg;
+};
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct CompRead {
+    //TODO: AddressRegType<AddressType, DataType> in here somehow
+    std::span<AddressType const> addresses;
+    std::span<DataType const> out_data;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct WriteVerify {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType data;
+    DataType mask;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct ReadVerify {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType expected;
+    DataType mask;
+    std::string_view msg;
+};
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+struct PollRead {
+    AddressRegFieldType<AddressType, DataType> address;
+    DataType expected;
+    DataType mask;
+    std::string_view msg;
+};
+
+}
+
+template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
+class IFluentInterposer
 {
-protected:
-    IFluentRegisterTargetInterposer() = default;
 public:
-    virtual ~IFluentRegisterTargetInterposer() = default;
+    virtual ~IFluentInterposer() = default;
 
-    virtual void seq(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
-    virtual void step(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
-    virtual void opStart(std::string_view target_domain, std::string_view target_instance, std::string_view op_msg) = 0;
-    virtual void opExtra(std::string_view target_domain, std::string_view target_instance, std::string_view values) = 0;
-    virtual void opEnd(std::string_view target_domain, std::string_view target_instance) = 0;
-    virtual void opError(std::string_view target_domain, std::string_view target_instance, std::string_view msg) = 0;
+    virtual void seq(std::string_view target_domain, std::string_view target_instance, Operations::Seq const& seq) = 0;
+    virtual void step(std::string_view target_domain, std::string_view target_instance, Operations::Step const& step) = 0;
 
-public:
-    static void setDefault(std::unique_ptr<IFluentRegisterTargetInterposer> new_default_interposer)
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::Null const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::Null const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::Delay const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::Delay const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::Write<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::Write<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::Read<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::Read<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::ReadModifyWrite<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::ReadModifyWrite<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::SeqWrite<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::SeqWrite<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::SeqRead<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::SeqRead<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::FifoWrite<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::FifoWrite<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::FifoRead<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::FifoRead<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::CompWrite<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::CompWrite<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::CompRead<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::CompRead<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::WriteVerify<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::WriteVerify<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::ReadVerify<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::ReadVerify<AddressType, DataType> const& op) = 0;
+    virtual void op(std::string_view target_domain, std::string_view target_instance, Operations::PollRead<AddressType, DataType> const& op) = 0;
+    virtual void end(std::string_view target_domain, std::string_view target_instance, Operations::PollRead<AddressType, DataType> const& op) = 0;
+
+    virtual void error(std::string_view target_domain, std::string_view target_instance, std::exception const& ex) = 0;
+
+    static void setDefault(std::unique_ptr<IFluentInterposer> new_default_interposer)
     {
         default_interposer = std::move(new_default_interposer);
     }
-    static IFluentRegisterTargetInterposer* getDefault()
+    static IFluentInterposer* getDefault()
     {
         return default_interposer.get();
     }
+
 private:
-    static std::unique_ptr<IFluentRegisterTargetInterposer> default_interposer;
+    static std::unique_ptr<IFluentInterposer> default_interposer;
 };
+
 #ifdef RTF_IMPLEMENTATION
-std::unique_ptr<IFluentRegisterTargetInterposer> IFluentRegisterTargetInterposer::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint8_t, uint8_t>> IFluentInterposer<uint8_t, uint8_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint8_t, uint16_t>> IFluentInterposer<uint8_t, uint16_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint8_t, uint32_t>> IFluentInterposer<uint8_t, uint32_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint8_t, uint64_t>> IFluentInterposer<uint8_t, uint64_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint16_t, uint8_t>> IFluentInterposer<uint16_t, uint8_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint16_t, uint16_t>> IFluentInterposer<uint16_t, uint16_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint16_t, uint32_t>> IFluentInterposer<uint16_t, uint32_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint16_t, uint64_t>> IFluentInterposer<uint16_t, uint64_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint32_t, uint8_t>> IFluentInterposer<uint32_t, uint8_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint32_t, uint16_t>> IFluentInterposer<uint32_t, uint16_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint32_t, uint32_t>> IFluentInterposer<uint32_t, uint32_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint32_t, uint64_t>> IFluentInterposer<uint32_t, uint64_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint64_t, uint8_t>> IFluentInterposer<uint64_t, uint8_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint64_t, uint16_t>> IFluentInterposer<uint64_t, uint16_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint64_t, uint32_t>> IFluentInterposer<uint64_t, uint32_t>::default_interposer = nullptr;
+std::unique_ptr<IFluentInterposer<uint64_t, uint64_t>> IFluentInterposer<uint64_t, uint64_t>::default_interposer = nullptr;
 #endif
 
 template <typename T>
@@ -239,179 +416,121 @@ template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
 class FluentRegisterTarget //: public IRegisterTarget<AddressType, DataType> // Can't actually inherit because of covariance requirements on return values.
 {
 private:
-    void opStart(std::string_view msg)
+    template <typename OpT, typename OpFunctor>
+    FluentRegisterTarget& doOp(OpT const& op, OpFunctor fn)
     {
-        if (this->interposer) {
-            this->interposer->opStart(this->target->getDomain(), this->target->getName(), msg);
+        if (this->interposer)
+            this->interposer->op(this->getDomain(), this->getName(), op);
+        try {
+            fn();
         }
-    }
-    template <typename... Args>
-    void opStart(std::format_string<Args...> fmt, Args... args)
-    {
-        if (this->interposer) {
-            this->interposer->opStart(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
+        catch (std::exception const& ex) {
+            if (this->interposer)
+                this->interposer->error(this->getDomain(), this->getName(), ex);
+            throw;
         }
-    }
-    void opExtra(DataType data)
-    {
-        if (this->interposer) {
-            this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", data, sizeof(DataType) * 2));
-        }
-    }
-    void opExtra(std::span<DataType const> data)
-    {
-        if (this->interposer) {
-            for (auto const d : data) {
-                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", d, sizeof(DataType) * 2));
-            }
-        }
-    }
-    void opExtra(std::span<AddressType const> addresses)
-        requires (!std::is_same_v<AddressType, DataType>)
-    {
-        if (this->interposer) {
-            for (auto const a : addresses) {
-                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x}", a, sizeof(AddressType) * 2));
-            }
-        }
-    }
-    void opExtra(std::span<std::pair<AddressType, DataType> const> addr_data)
-    {
-        if (this->interposer) {
-            for (auto const ad : addr_data) {
-                this->interposer->opExtra(this->target->getDomain(), this->target->getName(), std::format("0x{:0{}x} 0x{:0{}x}", ad.first, sizeof(AddressType) * 2, ad.second, sizeof(DataType) * 2));
-            }
-        }
-    }
-    void opEnd()
-    {
-        if (this->interposer) {
-            this->interposer->opEnd(this->target->getDomain(), this->target->getName());
-        }
-    }
-    void opError(std::string_view msg)
-    {
-        if (this->interposer) {
-            this->interposer->opError(this->target->getDomain(), this->target->getName(), msg);
-        }
+        if (this->interposer)
+            this->interposer->end(this->getDomain(), this->getName(), op);
+        return *this;
     }
 public:
-    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, IRegisterTarget<AddressType, DataType>& target)
+    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, IRegisterTarget<AddressType, DataType>& target)
         : interposer(interposer)
         , target(&target)
     {}
     explicit FluentRegisterTarget(IRegisterTarget<AddressType, DataType>& target)
-        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), target)
+        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), target)
     {}
 
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::unique_ptr<T> target)
+    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, std::unique_ptr<T> target)
         : interposer(interposer)
         , target(std::unique_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
     explicit FluentRegisterTarget(std::unique_ptr<T> target)
-        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), std::move(target))
+        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
     {}
 
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    FluentRegisterTarget(IFluentRegisterTargetInterposer* interposer, std::shared_ptr<T> target)
+    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, std::shared_ptr<T> target)
         : interposer(interposer)
         , target(std::shared_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
     explicit FluentRegisterTarget(std::shared_ptr<T> target)
-        : FluentRegisterTarget(IFluentRegisterTargetInterposer::getDefault(), std::move(target))
+        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
     {}
+
+    std::string_view getDomain() const { return this->target->getDomain(); }
+    std::string_view getName() const { return this->target->getName(); }
 
     template <typename... Args>
     FluentRegisterTarget& seq(std::format_string<Args...> fmt, Args... args)
     {
-        if (this->interposer) {
-            this->interposer->seq(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
-        }
+        if (this->interposer)
+            this->interposer->seq(this->getDomain(), this->getName(), Operations::Seq{std::vformat(fmt.get(), std::make_format_args(args...))});
         return *this;
     }
     FluentRegisterTarget& seq(std::string_view msg)
     {
-        if (this->interposer) {
-            this->interposer->seq(this->target->getDomain(), this->target->getName(), msg);
-        }
+        if (this->interposer)
+            this->interposer->seq(this->getDomain(), this->getName(), Operations::Seq{msg});
         return *this;
     }
 
     template <typename... Args>
     FluentRegisterTarget& step(std::format_string<Args...> fmt, Args... args)
     {
-        if (this->interposer) {
-            this->interposer->step(this->target->getDomain(), this->target->getName(), std::vformat(fmt.get(), std::make_format_args(args...)));
-        }
+        if (this->interposer)
+            this->interposer->step(this->getDomain(), this->getName(), Operations::Step{std::vformat(fmt.get(), std::make_format_args(args...))});
         return *this;
     }
     FluentRegisterTarget& step(std::string_view msg)
     {
-        if (this->interposer) {
-            this->interposer->step(this->target->getDomain(), this->target->getName(), msg);
-        }
+        if (this->interposer)
+            this->interposer->step(this->getDomain(), this->getName(), Operations::Step{msg});
         return *this;
     }
 
     FluentRegisterTarget& null(std::string_view msg = "")
     {
-        this->opStart("Null(): {}", msg);
-        this->opEnd();
-        return *this;
+        auto const op = Operations::Null{msg};
+        return doOp(op, [] { /* do nothing */});
+
     }
 
     FluentRegisterTarget& delay(std::chrono::microseconds delay, std::string_view msg = "")
     {
-        this->opStart("Delay({}): {}", delay, msg);
-        std::this_thread::sleep_for(delay);
-        this->opEnd();
-        return *this;
+        auto const op = Operations::Delay{delay, msg};
+        return doOp(op, [&] {
+            std::this_thread::sleep_for(delay);
+        });
     }
 
     FluentRegisterTarget& write(AddressType addr, DataType data, std::string_view msg = "")
     {
-        this->opStart("Write(0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, data, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::Write<AddressType, DataType>{addr, data, msg};
+        return doOp(op, [&] {
             this->target->write(addr, data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& write(::RMF::Register<AddressType, DataType> const& reg, DataType data, std::string_view msg = "")
     {
-        this->opStart("Write(0x{:0{}x} '{}', 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), data, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::Write<AddressType, DataType>{reg, data, msg};
+        return doOp(op, [&] {
             this->target->write(reg.address(), data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
     FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
     {
-        this->opStart("Write(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_data, (field.size() + 3) / 4, msg);
-        try {
+        auto const op = Operations::Write{field, field.regVal(field_data), msg};
+        return doOp(op, [&] {
             this->target->write(field.address(), field.regVal(field_data));
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     #else
     FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
@@ -420,286 +539,164 @@ public:
 
     FluentRegisterTarget& read(AddressType addr, DataType& out_data, std::string_view msg = "")
     {
-        this->opStart("Read(0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, msg);
-        try {
+        auto const op = Operations::Read<AddressType, DataType>{addr, out_data, msg};
+        return doOp(op, [&] {
             out_data = this->target->read(addr);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
     {
-        this->opStart("Read(0x{:0{}x} '{}'): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), msg);
-        try {
+        auto const op = Operations::Read<AddressType, DataType>{reg, out_data, msg};
+        return doOp(op, [&] {
             out_data = this->target->read(reg.address());
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
-    FluentRegisterTarget& read(::RMF::Field<AddressType, DataType> const& field, DataType& out_data, std::string_view msg = "")
+    FluentRegisterTarget& read(::RMF::Field<AddressType, DataType> const& field, DataType& out_field_data, std::string_view msg = "")
     {
-        this->opStart("Read(0x{:0{}x} '{}'): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), msg);
-        try {
-            out_data = field.extract(this->target->read(field.address()));
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        DataType reg_data{};
+        auto const op = Operations::Read<AddressType, DataType>{field, reg_data, msg};
+        return doOp(op, [&] {
+            reg_data = this->target->read(field.address());
+            out_field_data = field.extract(reg_data);
+        });
     }
     #endif
 
     FluentRegisterTarget& readModifyWrite(AddressType addr, DataType new_data, DataType mask, std::string_view msg = "")
     {
-        this->opStart("ReadModifyWrite(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::ReadModifyWrite<AddressType, DataType>{addr, new_data, mask, msg};
+        return doOp(op, [&] {
             this->target->readModifyWrite(addr, new_data, mask);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
     {
-        this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), new_data & mask, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::ReadModifyWrite<AddressType, DataType>{reg, new_data, mask, msg};
+        return doOp(op, [&] {
             this->target->readModifyWrite(reg.address(), new_data, mask);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& readModifyWrite(::RMF::Field<AddressType, DataType> const& field, DataType field_new_data, std::string_view msg = "")
     {
-        DataType const mask = field.regMask();
-        DataType const new_data = field.regVal(field_new_data);
-        this->opStart("ReadModifyWrite(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_new_data, (field.size() + 3) / 4, msg);
-        try {
-            this->target->readModifyWrite(field.address(), new_data, mask);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        auto const op = Operations::ReadModifyWrite<AddressType, DataType>{field, field.regVal(field_new_data), field.dataMask(), msg};
+        return doOp(op, [&] {
+            this->target->readModifyWrite(field.address(), field.regVal(field_new_data), field.regMask());
+        });
     }
     #endif
 
     FluentRegisterTarget& seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
-        this->opStart("SeqWrite(0x{:0{}x}, {}.., {}): {}", start_addr, sizeof(AddressType) * 2, data.size(), increment, msg);
-        this->opExtra(data);
-        try {
+        auto const op = Operations::SeqWrite<AddressType, DataType>{start_addr, data, increment, msg};
+        return doOp(op, [&] {
             this->target->seqWrite(start_addr, data, increment);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& seqRead(AddressType start_addr, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
-        this->opStart("SeqRead(0x{:0{}x}, {}.., {}): {}", start_addr, sizeof(AddressType) * 2, out_data.size(), increment, msg);
-        try {
+        auto const op = Operations::SeqRead<AddressType, DataType>{start_addr, out_data, increment, msg};
+        return doOp(op, [&] {
             this->target->seqRead(start_addr, out_data, increment);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
-        this->opStart("SeqWrite(0x{:0{}x} '{}', {}.., {}): {}", start_reg.address(), sizeof(AddressType) * 2, start_reg.fullName(), data.size(), increment, msg);
-        this->opExtra(data);
-        try {
+        auto const op = Operations::SeqWrite<AddressType, DataType>{start_reg, data, increment, msg};
+        return doOp(op, [&] {
             this->target->seqWrite(start_reg.address(), data, increment);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& seqRead(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
-        this->opStart("SeqRead(0x{:0{}x} '{}', {}.., {}): {}", start_reg.address(), sizeof(AddressType) * 2, start_reg.fullName(), out_data.size(), increment, msg);
-        try {
+        auto const op = Operations::SeqRead<AddressType, DataType>{start_reg, out_data, increment, msg};
+        return doOp(op, [&] {
             this->target->seqRead(start_reg.address(), out_data, increment);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
     #endif
 
     FluentRegisterTarget& fifoWrite(AddressType fifo_addr, std::span<DataType const> data, std::string_view msg = "")
     {
-        this->opStart("FifoWrite(0x{:0{}x}, {}..): {}", fifo_addr, sizeof(AddressType) * 2, data.size(), msg);
-        this->opExtra(data);
-        try {
+        auto const op = Operations::FifoWrite<AddressType, DataType>{fifo_addr, data, msg};
+        return doOp(op, [&] {
             this->target->fifoWrite(fifo_addr, data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& fifoRead(AddressType fifo_addr, std::span<DataType> out_data, std::string_view msg = "")
     {
-        this->opStart("FifoRead(0x{:0{}x}, {}): {}", fifo_addr, sizeof(AddressType) * 2, out_data.size(), msg);
-        try {
+        auto const op = Operations::FifoRead<AddressType, DataType>{fifo_addr, out_data, msg};
+        return doOp(op, [&] {
             this->target->fifoRead(fifo_addr, out_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType const> data, std::string_view msg = "")
     {
-        this->opStart("FifoWrite(0x{:0{}x} '{}', {}..): {}", fifo_reg.address(), sizeof(AddressType) * 2, fifo_reg.fullName(), data.size(), msg);
-        this->opExtra(data);
-        try {
+        auto const op = Operations::FifoWrite<AddressType, DataType>{fifo_reg, data, msg};
+        return doOp(op, [&] {
             this->target->fifoWrite(fifo_reg.address(), data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType> out_data, std::string_view msg = "")
     {
-        this->opStart("FifoRead(0x{:0{}x} '{}', {}): {}", fifo_reg.address(), sizeof(AddressType) * 2, fifo_reg.fullName(), out_data.size(), msg);
-        try {
+        auto const op = Operations::FifoRead<AddressType, DataType>{fifo_reg, out_data, msg};
+        return doOp(op, [&] {
             this->target->fifoRead(fifo_reg.address(), out_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
     #endif
 
     FluentRegisterTarget& compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
     {
-        this->opStart("CompWrite({}..): {}", addr_data.size(), msg);
-        this->opExtra(addr_data);
-        try {
+        auto const op = Operations::CompWrite{addr_data, msg};
+        return doOp(op, [&] {
             this->target->compWrite(addr_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
     {
-        this->opStart("CompRead({}.., {}..): {}", addresses.size(), out_data.size(), msg);
-        this->opExtra(addresses);
-        try {
+        auto const op = Operations::CompRead<AddressType, DataType>{addresses, out_data, msg};
+        return doOp(op, [&] {
             this->target->compRead(addresses, out_data);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opExtra(out_data);
-        this->opEnd();
-        return *this;
+        });
     }
 
     FluentRegisterTarget& writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")
     {
-        this->opStart("WriteVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, data, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::WriteVerify(addr, data, mask, msg);
+        return doOp(op, [&] {
             this->target->write(addr, data);
             DataType const reg_val = this->target->read(addr);
             DataType const expected_val = data & mask;
             if ((reg_val & mask) != expected_val)
                 throw WriteVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& writeVerify(::RMF::Register<AddressType, DataType> const& reg, DataType data, DataType mask, std::string_view msg = "")
     {
-        this->opStart("WriteVerify(0x{:0{}x} '{}, 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), data, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::WriteVerify<AddressType, DataType>{reg, data, mask, msg};
+        return doOp(op, [&] {
             this->target->write(reg.address(), data);
             DataType const reg_val = this->target->read(reg.address());
             DataType const expected_val = data & mask;
             if ((reg_val & mask) != expected_val)
                 throw WriteVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
     FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
     {
-        this->opStart("WriteVerify(0x{:0{}x} '{}, 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_data, (field.size() + 3) / 4, msg);
-        try {
+        auto const op = Operations::WriteVerify{field, field.regVal(field_data), msg};
+        return doOp(op, [&] {
             DataType const data = field.regVal(field_data);
             this->target->write(field.address(), data);
             DataType const reg_val = this->target->read(field.address());
@@ -707,13 +704,7 @@ public:
             DataType const expected_val = data & mask;
             if ((reg_val & mask) != expected_val)
                 throw WriteVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     #else
     FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
@@ -722,78 +713,54 @@ public:
 
     FluentRegisterTarget& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
-        this->opStart("ReadVerify(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try{
+        auto const op = Operations::ReadVerify{addr, expected, mask, msg};
+        return doOp(op, [&] {
             DataType const reg_val = this->target->read(addr);
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
                 throw ReadVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
 
     #ifdef RTF_INTEROP_RMF
     FluentRegisterTarget& readVerify(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
-        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, msg);
-        try{
+        auto const op = Operations::ReadVerify<AddressType, DataType>{reg, expected, mask, msg};
+        return doOp(op, [&] {
             DataType const reg_val = this->target->read(reg.address());
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
                 throw ReadVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& readVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
-        DataType const expected = field.regVal(field_expected);
-        DataType const mask = field.regMask();
-        this->opStart("ReadVerify(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_expected, (field.size() + 3) / 4, msg);
-        try{
+        auto const op = Operations::ReadVerify<AddressType, DataType>{field, field.regVal(field_expected), field.dataMask(), msg};
+        return doOp(op, [&] {
+            DataType const expected = field.regVal(field_expected);
+            DataType const mask = field.regMask();
             DataType const reg_val = this->target->read(field.address());
             DataType const expected_val = expected & mask;
             if ((reg_val & mask) != expected_val)
                 throw ReadVerifyFailureException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     #endif
 
     template <CPoller PollerType>
     FluentRegisterTarget& pollRead(PollerType const &poller, AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
-        this->opStart("PollRead(0x{:0{}x}, 0x{:0{}x}, 0x{:0{}x}): {}", addr, sizeof(AddressType) * 2, expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::PollRead<AddressType, DataType>{addr, expected, mask, msg};
+        return doOp(op, [&] {
             DataType const expected_val = expected & mask;
             DataType reg_val = {};
             bool const success = poller([&] {
-                reg_val = this->target->read(addr) ;
+                reg_val = this->target->read(addr);
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& pollRead(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
@@ -804,23 +771,17 @@ public:
     template <CPoller PollerType>
     FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
-        this->opStart("PollRead(0x{:0{}x} '{}', 0x{:0{}x}, 0x{:0{}x}): {}", reg.address(), sizeof(AddressType) * 2, reg.fullName(), expected, sizeof(DataType) * 2, mask, sizeof(DataType) * 2, msg);
-        try {
+        auto const op = Operations::PollRead<AddressType, DataType>{reg, expected, mask, msg};
+        return doOp(op, [&] {
             DataType const expected_val = expected & mask;
             DataType reg_val = {};
             bool const success = poller([&] {
-                reg_val = this->target->read(reg.address()) ;
+                reg_val = this->target->read(reg.address());
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& pollRead(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
@@ -830,25 +791,19 @@ public:
     template <CPoller PollerType>
     FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
-        DataType const expected = field.regVal(field_expected);
-        DataType const mask = field.regMask();
-        this->opStart("PollRead(0x{:0{}x} '{}', 0x{:0{}x}): {}", field.address(), sizeof(AddressType) * 2, field.fullName(), field_expected, (field.size() + 3) / 4, msg);
-        try {
+        auto const op = Operations::PollRead<AddressType, DataType>{field, field.regVal(field_expected), field.dataMask(), msg};
+        return doOp(op, [&] {
+            DataType const expected = field.regVal(field_expected);
+            DataType const mask = field.regMask();
             DataType const expected_val = expected & mask;
             DataType reg_val = {};
             bool const success = poller([&] {
-                reg_val = this->target->read(field.address()) ;
+                reg_val = this->target->read(field.address());
                 return (reg_val & mask) == expected_val;
             });
             if (!success)
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
-        }
-        catch (std::exception const& ex) {
-            this->opError(ex.what());
-            throw;
-        }
-        this->opEnd();
-        return *this;
+        });
     }
     FluentRegisterTarget& pollRead(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
@@ -946,18 +901,18 @@ public:
     #endif
 
 private:
-    IFluentRegisterTargetInterposer* interposer;
+    IFluentInterposer<AddressType, DataType>* interposer;
     OwnedOrViewedObject<IRegisterTarget<AddressType, DataType>> target;
 };
 
 template <typename T>
 FluentRegisterTarget(std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 template <typename T>
-FluentRegisterTarget(IFluentRegisterTargetInterposer*, std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+FluentRegisterTarget(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 template <typename T>
 FluentRegisterTarget(std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 template <typename T>
-FluentRegisterTarget(IFluentRegisterTargetInterposer*, std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+FluentRegisterTarget(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
 
 template <typename T, typename FnType>
 inline
@@ -978,3 +933,4 @@ void chunkify(std::span<T> buffer, size_t max_chunk_size, FnType fn)
 #endif
 
 }
+
