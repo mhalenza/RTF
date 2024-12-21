@@ -52,13 +52,13 @@ public:
     virtual void seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment = sizeof(DataType))
     {
         for (size_t i = 0 ; i < data.size() ; i++) {
-            this->write(start_addr + (increment * i), data[i]);
+            this->write(AddressType(start_addr + (increment * i)), data[i]);
         }
     }
     virtual void seqRead(AddressType start_addr, std::span<DataType> out_data, size_t increment = sizeof(DataType))
     {
         for (size_t i = 0 ; i < out_data.size() ; i++) {
-            out_data[i] = this->read(start_addr + (increment * i));
+            out_data[i] = this->read(AddressType(start_addr + (increment * i)));
         }
     }
 
