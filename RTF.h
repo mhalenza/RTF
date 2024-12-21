@@ -22,13 +22,8 @@
 
 namespace RTF {
 
-#ifndef RTF_UNRESTRICTED_ADDRESS_AND_DATA_TYPES
 template <typename T>
 concept ValidAddressOrDataType = std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>;
-#else
-template <typename T>
-concept ValidAddressOrDataType = std::is_same_v<T, T>;
-#endif
 
 template <ValidAddressOrDataType AddressType_, ValidAddressOrDataType DataType_>
 struct IRegisterTarget

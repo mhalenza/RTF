@@ -31,10 +31,6 @@ Currently the two functions enabled by this are `write()` and `writeVerify()` th
 These are considered dangerous because they overwrite the whole register, but the call signature may lead the reader to believe they're merely writing the field (essentially requiring a read-modify-write of the whole register).
 These *can* be used safely if the register uses "write enables" but at this time RTF & RMF don't really allow this to work in a clean way.
 
-#### RTF_UNRESTRICTED_ADDRESS_AND_DATA_TYPES
-Normally, `AddressType` and `DataType` are restricted to `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`.
-When this is defined, the check is completely removed and any type can be used.
-
 #### RTF_DEFAULT_POLLER_INITIAL_DELAY, RTF_DEFAULT_POLLER_RECHECK_DELAY, RTF_DEFAULT_POLLER_TIMEOUT
 Sets the parameters for a `BasicPoller` that is used by `pollRead` when a `CPoller` is not supplied.
 See [Default BasicPoller](#default-basicpoller) for more.
