@@ -981,11 +981,11 @@ public:
 };
 
 template <ValidAddressOrDataType AddressType, ValidAddressOrDataType DataType>
-class FluentRegisterTarget //: public IRegisterTarget<AddressType, DataType> // Can't actually inherit because of covariance requirements on return values.
+class Fluent //: public IRegisterTarget<AddressType, DataType> // Can't actually inherit because of covariance requirements on return values.
 {
 private:
     template <typename OpT, typename OpFunctor>
-    FluentRegisterTarget& doOp(OpT const& op, OpFunctor fn)
+    Fluent& doOp(OpT const& op, OpFunctor fn)
     {
         if (this->interposer)
             this->interposer->op(this->getDomain(), this->getName(), op);
@@ -1002,45 +1002,45 @@ private:
         return *this;
     }
 public:
-    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, IRegisterTarget<AddressType, DataType>& target)
+    Fluent(IFluentInterposer<AddressType, DataType>* interposer, IRegisterTarget<AddressType, DataType>& target)
         : interposer(interposer)
         , target(&target)
     {}
-    explicit FluentRegisterTarget(IRegisterTarget<AddressType, DataType>& target)
-        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), target)
+    explicit Fluent(IRegisterTarget<AddressType, DataType>& target)
+        : Fluent(IFluentInterposer<AddressType, DataType>::getDefault(), target)
     {}
 
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, std::unique_ptr<T> target)
+    Fluent(IFluentInterposer<AddressType, DataType>* interposer, std::unique_ptr<T> target)
         : interposer(interposer)
         , target(std::unique_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    explicit FluentRegisterTarget(std::unique_ptr<T> target)
-        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
+    explicit Fluent(std::unique_ptr<T> target)
+        : Fluent(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
     {}
 
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    FluentRegisterTarget(IFluentInterposer<AddressType, DataType>* interposer, std::shared_ptr<T> target)
+    Fluent(IFluentInterposer<AddressType, DataType>* interposer, std::shared_ptr<T> target)
         : interposer(interposer)
         , target(std::shared_ptr<IRegisterTarget<AddressType, DataType>>(std::move(target)))
     {}
     template <std::derived_from<IRegisterTarget<AddressType, DataType>> T>
-    explicit FluentRegisterTarget(std::shared_ptr<T> target)
-        : FluentRegisterTarget(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
+    explicit Fluent(std::shared_ptr<T> target)
+        : Fluent(IFluentInterposer<AddressType, DataType>::getDefault(), std::move(target))
     {}
 
     std::string_view getDomain() const { return this->target->getDomain(); }
     std::string_view getName() const { return this->target->getName(); }
 
     template <typename... Args>
-    FluentRegisterTarget& seq(std::format_string<Args...> fmt, Args... args)
+    Fluent& seq(std::format_string<Args...> fmt, Args... args)
     {
         if (this->interposer)
             this->interposer->seq(this->getDomain(), this->getName(), Operations::Seq{std::vformat(fmt.get(), std::make_format_args(args...))});
         return *this;
     }
-    FluentRegisterTarget& seq(std::string_view msg)
+    Fluent& seq(std::string_view msg)
     {
         if (this->interposer)
             this->interposer->seq(this->getDomain(), this->getName(), Operations::Seq{msg});
@@ -1048,27 +1048,27 @@ public:
     }
 
     template <typename... Args>
-    FluentRegisterTarget& step(std::format_string<Args...> fmt, Args... args)
+    Fluent& step(std::format_string<Args...> fmt, Args... args)
     {
         if (this->interposer)
             this->interposer->step(this->getDomain(), this->getName(), Operations::Step{std::vformat(fmt.get(), std::make_format_args(args...))});
         return *this;
     }
-    FluentRegisterTarget& step(std::string_view msg)
+    Fluent& step(std::string_view msg)
     {
         if (this->interposer)
             this->interposer->step(this->getDomain(), this->getName(), Operations::Step{msg});
         return *this;
     }
 
-    FluentRegisterTarget& null(std::string_view msg = "")
+    Fluent& null(std::string_view msg = "")
     {
         auto const op = Operations::Null{msg};
         return doOp(op, [] { /* do nothing */});
 
     }
 
-    FluentRegisterTarget& delay(std::chrono::microseconds delay, std::string_view msg = "")
+    Fluent& delay(std::chrono::microseconds delay, std::string_view msg = "")
     {
         auto const op = Operations::Delay{delay, msg};
         return doOp(op, [&] {
@@ -1076,7 +1076,7 @@ public:
         });
     }
 
-    FluentRegisterTarget& write(AddressType addr, DataType data, std::string_view msg = "")
+    Fluent& write(AddressType addr, DataType data, std::string_view msg = "")
     {
         auto const op = Operations::Write<AddressType, DataType>{addr, data, msg};
         return doOp(op, [&] {
@@ -1085,7 +1085,7 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& write(::RMF::Register<AddressType, DataType> const& reg, DataType data, std::string_view msg = "")
+    Fluent& write(::RMF::Register<AddressType, DataType> const& reg, DataType data, std::string_view msg = "")
     {
         auto const op = Operations::Write<AddressType, DataType>{reg, data, msg};
         return doOp(op, [&] {
@@ -1093,7 +1093,7 @@ public:
         });
     }
     #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
-    FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
+    Fluent& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
     {
         auto const op = Operations::Write{field, field.regVal(field_data), msg};
         return doOp(op, [&] {
@@ -1101,11 +1101,11 @@ public:
         });
     }
     #else
-    FluentRegisterTarget& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    Fluent& write(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
     #endif
     #endif
 
-    FluentRegisterTarget& read(AddressType addr, DataType& out_data, std::string_view msg = "")
+    Fluent& read(AddressType addr, DataType& out_data, std::string_view msg = "")
     {
         auto const op = Operations::Read<AddressType, DataType>{addr, out_data, msg};
         return doOp(op, [&] {
@@ -1114,14 +1114,14 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
+    Fluent& read(::RMF::Register<AddressType, DataType> const& reg, DataType& out_data, std::string_view msg = "")
     {
         auto const op = Operations::Read<AddressType, DataType>{reg, out_data, msg};
         return doOp(op, [&] {
             out_data = this->target->read(reg.address());
         });
     }
-    FluentRegisterTarget& read(::RMF::Field<AddressType, DataType> const& field, DataType& out_field_data, std::string_view msg = "")
+    Fluent& read(::RMF::Field<AddressType, DataType> const& field, DataType& out_field_data, std::string_view msg = "")
     {
         DataType reg_data{};
         auto const op = Operations::Read<AddressType, DataType>{field, reg_data, msg};
@@ -1132,7 +1132,7 @@ public:
     }
     #endif
 
-    FluentRegisterTarget& readModifyWrite(AddressType addr, DataType new_data, DataType mask, std::string_view msg = "")
+    Fluent& readModifyWrite(AddressType addr, DataType new_data, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::ReadModifyWrite<AddressType, DataType>{addr, new_data, mask, msg};
         return doOp(op, [&] {
@@ -1141,14 +1141,14 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
+    Fluent& readModifyWrite(::RMF::Register<AddressType, DataType> const& reg, DataType new_data, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::ReadModifyWrite<AddressType, DataType>{reg, new_data, mask, msg};
         return doOp(op, [&] {
             this->target->readModifyWrite(reg.address(), new_data, mask);
         });
     }
-    FluentRegisterTarget& readModifyWrite(::RMF::Field<AddressType, DataType> const& field, DataType field_new_data, std::string_view msg = "")
+    Fluent& readModifyWrite(::RMF::Field<AddressType, DataType> const& field, DataType field_new_data, std::string_view msg = "")
     {
         auto const op = Operations::ReadModifyWrite<AddressType, DataType>{field, field.regVal(field_new_data), field.dataMask(), msg};
         return doOp(op, [&] {
@@ -1157,14 +1157,14 @@ public:
     }
     #endif
 
-    FluentRegisterTarget& seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqWrite(AddressType start_addr, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         auto const op = Operations::SeqWrite<AddressType, DataType>{start_addr, data, increment, msg};
         return doOp(op, [&] {
             this->target->seqWrite(start_addr, data, increment);
         });
     }
-    FluentRegisterTarget& seqRead(AddressType start_addr, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqRead(AddressType start_addr, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         auto const op = Operations::SeqRead<AddressType, DataType>{start_addr, out_data, increment, msg};
         return doOp(op, [&] {
@@ -1173,14 +1173,14 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         auto const op = Operations::SeqWrite<AddressType, DataType>{start_reg, data, increment, msg};
         return doOp(op, [&] {
             this->target->seqWrite(start_reg.address(), data, increment);
         });
     }
-    FluentRegisterTarget& seqRead(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqRead(::RMF::Register<AddressType, DataType> const& start_reg, std::span<DataType> out_data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         auto const op = Operations::SeqRead<AddressType, DataType>{start_reg, out_data, increment, msg};
         return doOp(op, [&] {
@@ -1189,14 +1189,14 @@ public:
     }
     #endif
 
-    FluentRegisterTarget& fifoWrite(AddressType fifo_addr, std::span<DataType const> data, std::string_view msg = "")
+    Fluent& fifoWrite(AddressType fifo_addr, std::span<DataType const> data, std::string_view msg = "")
     {
         auto const op = Operations::FifoWrite<AddressType, DataType>{fifo_addr, data, msg};
         return doOp(op, [&] {
             this->target->fifoWrite(fifo_addr, data);
         });
     }
-    FluentRegisterTarget& fifoRead(AddressType fifo_addr, std::span<DataType> out_data, std::string_view msg = "")
+    Fluent& fifoRead(AddressType fifo_addr, std::span<DataType> out_data, std::string_view msg = "")
     {
         auto const op = Operations::FifoRead<AddressType, DataType>{fifo_addr, out_data, msg};
         return doOp(op, [&] {
@@ -1205,14 +1205,14 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType const> data, std::string_view msg = "")
+    Fluent& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType const> data, std::string_view msg = "")
     {
         auto const op = Operations::FifoWrite<AddressType, DataType>{fifo_reg, data, msg};
         return doOp(op, [&] {
             this->target->fifoWrite(fifo_reg.address(), data);
         });
     }
-    FluentRegisterTarget& fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType> out_data, std::string_view msg = "")
+    Fluent& fifoRead(::RMF::Register<AddressType, DataType> const& fifo_reg, std::span<DataType> out_data, std::string_view msg = "")
     {
         auto const op = Operations::FifoRead<AddressType, DataType>{fifo_reg, out_data, msg};
         return doOp(op, [&] {
@@ -1221,14 +1221,14 @@ public:
     }
     #endif
 
-    FluentRegisterTarget& compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
+    Fluent& compWrite(std::span<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
     {
         auto const op = Operations::CompWrite{addr_data, msg};
         return doOp(op, [&] {
             this->target->compWrite(addr_data);
         });
     }
-    FluentRegisterTarget& compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
+    Fluent& compRead(std::span<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
     {
         auto const op = Operations::CompRead<AddressType, DataType>{addresses, out_data, msg};
         return doOp(op, [&] {
@@ -1236,7 +1236,7 @@ public:
         });
     }
 
-    FluentRegisterTarget& writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")
+    Fluent& writeVerify(AddressType addr, DataType data, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::WriteVerify(addr, data, mask, msg);
         return doOp(op, [&] {
@@ -1249,7 +1249,7 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& writeVerify(::RMF::Register<AddressType, DataType> const& reg, DataType data, DataType mask, std::string_view msg = "")
+    Fluent& writeVerify(::RMF::Register<AddressType, DataType> const& reg, DataType data, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::WriteVerify<AddressType, DataType>{reg, data, mask, msg};
         return doOp(op, [&] {
@@ -1261,7 +1261,7 @@ public:
         });
     }
     #ifdef RTF_ENABLE_POTENTIALLY_MISUSED_OPERATIONS
-    FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
+    Fluent& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "")
     {
         auto const op = Operations::WriteVerify{field, field.regVal(field_data), msg};
         return doOp(op, [&] {
@@ -1275,11 +1275,11 @@ public:
         });
     }
     #else
-    FluentRegisterTarget& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
+    Fluent& writeVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_data, std::string_view msg = "") = delete;
     #endif
     #endif
 
-    FluentRegisterTarget& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& readVerify(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::ReadVerify{addr, expected, mask, msg};
         return doOp(op, [&] {
@@ -1291,7 +1291,7 @@ public:
     }
 
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& readVerify(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& readVerify(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::ReadVerify<AddressType, DataType>{reg, expected, mask, msg};
         return doOp(op, [&] {
@@ -1301,7 +1301,7 @@ public:
                 throw ReadVerifyFailureException(expected_val, mask, reg_val);
         });
     }
-    FluentRegisterTarget& readVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    Fluent& readVerify(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
         auto const op = Operations::ReadVerify<AddressType, DataType>{field, field.regVal(field_expected), field.dataMask(), msg};
         return doOp(op, [&] {
@@ -1316,7 +1316,7 @@ public:
     #endif
 
     template <CPoller PollerType>
-    FluentRegisterTarget& pollRead(PollerType const &poller, AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& pollRead(PollerType const &poller, AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::PollRead<AddressType, DataType>{addr, expected, mask, msg};
         return doOp(op, [&] {
@@ -1330,14 +1330,14 @@ public:
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
         });
     }
-    FluentRegisterTarget& pollRead(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& pollRead(AddressType addr, DataType expected, DataType mask, std::string_view msg = "")
     {
         return this->pollRead(default_poller, addr, expected, mask, msg);
     }
 
     #ifdef RTF_INTEROP_RMF
     template <CPoller PollerType>
-    FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& pollRead(PollerType const& poller, ::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
         auto const op = Operations::PollRead<AddressType, DataType>{reg, expected, mask, msg};
         return doOp(op, [&] {
@@ -1351,13 +1351,13 @@ public:
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
         });
     }
-    FluentRegisterTarget& pollRead(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
+    Fluent& pollRead(::RMF::Register<AddressType, DataType> const& reg, DataType expected, DataType mask, std::string_view msg = "")
     {
         return this->pollRead(default_poller, reg, expected, mask, msg);
     }
 
     template <CPoller PollerType>
-    FluentRegisterTarget& pollRead(PollerType const& poller, ::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    Fluent& pollRead(PollerType const& poller, ::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
         auto const op = Operations::PollRead<AddressType, DataType>{field, field.regVal(field_expected), field.dataMask(), msg};
         return doOp(op, [&] {
@@ -1373,7 +1373,7 @@ public:
                 throw PollReadTimeoutException(expected_val, mask, reg_val);
         });
     }
-    FluentRegisterTarget& pollRead(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
+    Fluent& pollRead(::RMF::Field<AddressType, DataType> const& field, DataType field_expected, std::string_view msg = "")
     {
         return this->pollRead(default_poller, field, field_expected, msg);
     }
@@ -1437,19 +1437,19 @@ public:
     #endif
 
     // Overloads that take a std::initializer_list instead of std::span (see P2447, adopted into C++26, so in a decade these can be removed!)
-    FluentRegisterTarget& seqWrite(AddressType start_addr, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqWrite(AddressType start_addr, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         return this->seqWrite(start_addr, std::span{ data.begin(), data.end() }, increment, msg);
     }
-    FluentRegisterTarget& fifoWrite(AddressType fifo_addr, std::initializer_list<DataType const> data, std::string_view msg = "")
+    Fluent& fifoWrite(AddressType fifo_addr, std::initializer_list<DataType const> data, std::string_view msg = "")
     {
         return this->fifoWrite(fifo_addr, std::span{ data.begin(), data.end() }, msg);
     }
-    FluentRegisterTarget& compWrite(std::initializer_list<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
+    Fluent& compWrite(std::initializer_list<std::pair<AddressType, DataType> const> addr_data, std::string_view msg = "")
     {
         return this->compWrite(std::span{ addr_data.begin(), addr_data.end() }, msg);
     }
-    FluentRegisterTarget& compRead(std::initializer_list<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
+    Fluent& compRead(std::initializer_list<AddressType const> const addresses, std::span<DataType> out_data, std::string_view msg = "")
     {
         return this->compRead(std::span{ addresses.begin(), addresses.end() }, out_data, msg);
     }
@@ -1458,11 +1458,11 @@ public:
         return this->compRead(std::span{ addresses.begin(), addresses.end() }, msg);
     }
     #ifdef RTF_INTEROP_RMF
-    FluentRegisterTarget& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
+    Fluent& seqWrite(::RMF::Register<AddressType, DataType> const& start_reg, std::initializer_list<DataType const> data, size_t increment = sizeof(DataType), std::string_view msg = "")
     {
         return this->seqWrite(start_reg, std::span{ data.begin(), data.end() }, increment, msg);
     }
-    FluentRegisterTarget& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::initializer_list<DataType const> data, std::string_view msg = "")
+    Fluent& fifoWrite(::RMF::Register<AddressType, DataType> const& fifo_reg, std::initializer_list<DataType const> data, std::string_view msg = "")
     {
         return this->fifoWrite(fifo_reg, std::span{ data.begin(), data.end() }, msg);
     }
@@ -1474,13 +1474,13 @@ private:
 };
 
 template <typename T>
-FluentRegisterTarget(std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+Fluent(std::shared_ptr<T>) -> Fluent<typename T::AddressType, typename T::DataType>;
 template <typename T>
-FluentRegisterTarget(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::shared_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+Fluent(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::shared_ptr<T>) -> Fluent<typename T::AddressType, typename T::DataType>;
 template <typename T>
-FluentRegisterTarget(std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+Fluent(std::unique_ptr<T>) -> Fluent<typename T::AddressType, typename T::DataType>;
 template <typename T>
-FluentRegisterTarget(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::unique_ptr<T>) -> FluentRegisterTarget<typename T::AddressType, typename T::DataType>;
+Fluent(IFluentInterposer<typename T::AddressType, typename T::DataType>*, std::unique_ptr<T>) -> Fluent<typename T::AddressType, typename T::DataType>;
 
 template <typename T, typename FnType>
 inline
